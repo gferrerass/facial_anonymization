@@ -116,13 +116,11 @@ def configure_local_paths() -> None:
     (models_dir / "text_encoders").mkdir(exist_ok=True)
     (models_dir / "unet").mkdir(exist_ok=True)
     (models_dir / "vae").mkdir(exist_ok=True)
-    (models_dir / "checkpoints").mkdir(exist_ok=True)
     
     # Configure folder_paths to use local directories
     folder_paths.add_model_folder_path("text_encoders", str(models_dir / "text_encoders"))
     folder_paths.add_model_folder_path("unet", str(models_dir / "unet"))
     folder_paths.add_model_folder_path("vae", str(models_dir / "vae"))
-    folder_paths.add_model_folder_path("checkpoints", str(models_dir / "checkpoints"))
     
     # Configure output directory
     folder_paths.set_output_directory(str(output_dir))

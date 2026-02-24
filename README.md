@@ -1,160 +1,206 @@
-# Z-Image - ComfyUI Workflow Script
+# Facial Anonymisation - ComfyUI Workflow
 
-Script automatizado para ejecutar un flujo de generación de imágenes con ComfyUI.
+Automated script for running a generative workflow with ComfyUI using advanced image generation models.
 
-## Requisitos previos
+## Requirements
 
-- Python 3.10 o superior instalado en tu sistema
-- Los modelos descargados (ver sección "Modelos necesarios")
-- Git instalado (solo si ComfyUI no esta descargado)
+- **Python 3.10+** installed on your system
+- **CUDA 11.8+** or **CUDA 12.x** (for GPU acceleration)
+- **8GB+ VRAM** (recommended for smooth generation)
+- **16GB+ RAM** (minimum)
+- **50GB+ free disk space** (for models)
+- **Git** installed (optional, for ComfyUI download)
 
-## Estructura de carpetas
+## Project Structure
 
 ```
-zimage/
-├── main2.py
-├── requirements.txt
-├── setup.py
-├── run.py
-├── README.md
-├── ComfyUI/              ← Se descarga automaticamente si no existe
+facial_anonymisation/
+├── main.py               # Main execution script
+├── setup.py              # Setup script
+├── run.py                # Run script
+├── requirements.txt      # Python dependencies
+├── README.md             # This file
+├── ComfyUI/              # ComfyUI installation (auto-downloaded)
 ├── models/
-│   ├── text_encoders/      ← Coloca qwen_3_4b.safetensors aquí
-│   ├── unet/               ← Coloca z_image_turbo_bf16.safetensors aquí
-│   ├── vae/                ← Coloca ae.safetensors aquí
-│   └── checkpoints/
-└── output/                 ← Las imágenes generadas se guardan aquí
+│   ├── text_encoders/    # CLIP/Text encoder models
+│   ├── unet/             # Diffusion/UNET models
+│   └── vae/              # VAE encoder-decoder models
+├── input/                # Input directory (optional)
+├── output/               # Generated output images
+└── venv/                 # Virtual environment
 ```
 
-## Modelos necesarios
+## Required Models
 
-⚠️ **IMPORTANTE:** Antes de ejecutar, descarga estos modelos y colócalos en las carpetas indicadas:
+Before running, download and place these models in their respective folders:
 
-### 1. Qwen 3.4B (CLIP Model - Procesamiento de texto)
-- Tamaño: ~7GB
-- Coloca en: `models/text_encoders/`
-- Nombre: `qwen_3_4b.safetensors`
+### 1. Qwen 3.4B (Text Encoder)
+- **Size:** ~7GB
+- **Location:** `models/text_encoders/`
+- **Filename:** `qwen_3_4b.safetensors`
+- **Purpose:** Text prompt processing
 
-### 2. Z-Image Turbo (UNET - Generación)
-- Tamaño: ~2.5GB
-- Coloca en: `models/unet/`
-- Nombre: `z_image_turbo_bf16.safetensors`
+### 2. Z-Image Turbo (UNET)
+- **Size:** ~2.5GB
+- **Location:** `models/unet/`
+- **Filename:** `z_image_turbo_bf16.safetensors`
+- **Purpose:** Image generation
 
-### 3. AE VAE (Codificador/Decodificador)
-- Tamaño: ~200MB
-- Coloca en: `models/vae/`
-- Nombre: `ae.safetensors`
+### 3. AE VAE (Autoencoder)
+- **Size:** ~200MB
+- **Location:** `models/vae/`
+- **Filename:** `ae.safetensors`
+- **Purpose:** Latent encoding/decoding
 
-## Instalación rápida
+## Installation
 
-### Paso 1: Descargar modelos
+### Step 1: Clone and Setup the Environment
 
-Descarga los tres modelos mencionados arriba y colócalos en sus carpetas respectivas dentro de `zimage/models/`.
-
-### Paso 2: Configurar el entorno (una sola vez)
-
-**En cualquier sistema (Windows, Linux, macOS):**
 ```bash
-cd zimage
+# Clone the repository
+git clone <repository-url>
+cd facial_anonymisation
+
+# Run setup (creates virtual environment and installs dependencies)
 python setup.py
 ```
 
-Si ComfyUI no existe, el setup lo descargara en `zimage/ComfyUI`.
+### Step 2: Download Models
 
-### Paso 3: Ejecutar
+Download the three required models listed above and place them in their respective directories:
+- `models/text_encoders/qwen_3_4b.safetensors`
+- `models/unet/z_image_turbo_bf16.safetensors`
+- `models/vae/ae.safetensors`
 
-**En cualquier sistema (Windows, Linux, macOS):**
+### Step 3: Verify Installation
+
 ```bash
-python run.py
+# Activate virtual environment (if needed)
+# Windows:
+venv\Scripts\activate
+# Linux/macOS:
+source venv/bin/activate
 ```
 
-Las imágenes generadas aparecerán en la carpeta `output/`
+## Usage
 
-## Archivos incluidos
+### Running the Workflow
 
-- **main2.py** - Script principal que ejecuta el flujo de generación
-- **setup.py** - Script de configuración inicial (crea venv e instala dependencias)
-- **run.py** - Script para ejecutar el workflow
-- **requirements.txt** - Dependencias de Python necesarias
-- **models/** - Carpeta para almacenar los modelos localmente
-- **output/** - Carpeta donde se guardan las imágenes generadas
+```bash
+# Simple execution
+python run.py
 
-## Cómo funciona
+# Or directly
+python main.py
+```
 
-El script `main2.py` ejecuta el siguiente flujo:
+The script will:
+1. Initialize ComfyUI
+2. Load all required models
+3. Process prompts and generate images
+4. Save outputs to the `output/` directory
 
-1. **Configuración de rutas:** Prepara las carpetas locales de `models/` y `output/`
-2. **Carga de modelos:**
-   - CLIP Model (procesamiento de texto)
-   - UNET (generación de imágenes)
-   - VAE (codificador/decodificador)
-3. **Procesamiento:**
-   - Convierte tu prompt de texto en embedding
-   - Genera imagen latente
-   - Aplica denoising con 9 pasos
-   - Decodifica a imagen final
-4. **Salida:** Guarda la imagen en `output/` con prefijo personalizable
+### Example Output
 
-## Personalización
+```
+============================================================
+   STARTING BATCH IMAGE GENERATION (3 images)
+============================================================
 
-Puedes modificar `main2.py` para cambiar:
+▶ Loading models...
+✓ Models loaded in 15.23 seconds
 
-- **Prompt de imagen:** Línea ~137
-  ```python
-  text="Tu prompt aquí"
-  ```Busca `text="Latina female..."`
-  ```python
-  text="Tu descripción de imagen aquí"
-  ```
+============================================================
+   GENERATING IMAGE 1/3
+============================================================
+Prompt: Cinematic portrait of a futuristic cyberpunk woman...
 
-- **Tamaño de imagen:**
-  ```python
-  width=1024, height=1024  # Cambia a 512, 768, etc.
-  ```
+✓ Image 1 generated in 8.45 seconds
 
-- **Pasos de generación:**
-  ```python
-  steps=9  # Aumenta para más calidad (15-20 es excelente)
-  ```
+============================================================
+   BATCH GENERATION COMPLETED
+============================================================
+✓ Total images: 3
+✓ Total time: 25.34 seconds (0.42 minutes)
+✓ Average time per image: 8.45 seconds
+============================================================
+```
 
-- **Prefix del archivo de salida:**
-  ```python
-  filename_prefix="z-image"  # Cambia a un nombre personalizado
-  ```
-### Error: "ComfyUI not found"
-Asegúrate de que la carpeta `ComfyUI` está en el mismo nivel que `zimage`.
+## Configuration
 
-### Error: "ModelSamplingAuraFlow not found"
-Actualiza ComfyUI - este es un nodo base en versiones recientes.
+Edit `main.py` to customize:
 
-### Memoria insuficiente (CUDA/GPU)
-- Reduce el tamaño de imagen: `width=512, height=512`
-- Reduce los pasos: `steps=6`
-- Cambia a CPU (más lento)
-❌ Error: "ComfyUI not found"
-**Causa:** El script no puede encontrar la carpeta ComfyUI  
-**Solución:** Asegúrate de que la carpeta `ComfyUI` está en el mismo nivel que `zimage`
+- **Prompts:** Modify the `prompts` list to generate different images
+- **Image Size:** Change `width` and `height` parameters (default: 1024x1024)
+- **Sampling Steps:** Adjust `steps` parameter (default: 9)
+- **Output Directory:** Change with `folder_paths.set_output_directory()`
 
-### ❌ Error: "Model not found" (qwen_3_4b.safetensors, etc.)
-**Causa:** Los modelos no están en las carpetas correctas  
-**Solución:** 
-- Verifica que descargaste todos los 3 modelos
-- Coloca cada uno en su carpeta correspondiente dentro de `models/`
-- Los nombres deben ser exactos (mayúsculas/minúsculas)
+## File Descriptions
 
-### ❌ Error de memoria (CUDA out of memory / RAM full)
-**Causa:** El sistema no tiene suficiente memoria GPU/CPU  
-**Solución:**
-- Reduce el tamaño: `width=512, height=512`
-- Reduce los pasos: `steps=6`
+| File | Description |
+|------|-------------|
+| `main.py` | Main script that executes the generation workflow |
+| `setup.py` | Sets up virtual environment and installs dependencies |
+| `run.py` | Convenient script to run main.py |
+| `requirements.txt` | List of Python dependencies |
+| `florence_generation.py` | Florence model utilities (optional) |
 
-### ❌ El script se congela al iniciar
-**Causa:** ComfyUI está cargando los modelos grandes (puede tomar varios minutos)  
-**Solución:** Espera, los modelos de 7GB+ tardan en cargar la primera vez
+## Troubleshooting
 
-### ❌ No se generan imágenes / carpeta output vacía
-**Causa:** Los modelos no cargaron correctamente o hubo un error silencioso  
-**Solución:**
-- Verifica que los modelos están en las carpetas correctas
-- Abre la terminal para ver los mensajes de error
-- Comprueba que tienes suficiente espacio en disco
+### Model Not Found Error
+```
+FileNotFoundError: Model in folder 'xxx' with filename 'yyy' not found.
+```
+**Solution:** Ensure all three models are downloaded and placed in the correct directories.
+
+### CUDA/GPU Issues
+```
+RuntimeError: CUDA out of memory
+```
+**Solution:** 
+- Close other GPU-intensive applications
+- Reduce batch size
+- Ensure you have CUDA 11.8+ or higher installed
+- Check GPU drivers are up to date
+
+### Virtual Environment Issues
+```bash
+# Recreate virtual environment
+python -m venv venv
+python setup.py
+```
+
+## Performance Notes
+
+- First run will be slower (models loading)
+- GPU acceleration requires CUDA-compatible NVIDIA graphics card
+- Typical generation time per image: 8-15 seconds
+- Memory usage peaks during model loading (~12-14GB)
+
+## System Requirements Checklist
+
+- [ ] Python 3.10+
+- [ ] CUDA 11.8+ or 12.x
+- [ ] 8GB+ VRAM
+- [ ] 16GB+ System RAM
+- [ ] 50GB+ Free Storage
+- [ ] All three model files downloaded
+- [ ] Models placed in correct directories
+
+## Support
+
+For issues or questions, check:
+- ComfyUI documentation: https://github.com/comfyanonymous/ComfyUI
+- Model sources for download links
+- GPU driver compatibility
+
+## License
+
+[Add your license here]
+
+## Notes
+
+- Models are large files; ensure stable internet connection during download
+- First initialization downloads ComfyUI (~500MB)
+- Keep models in their designated folders for proper operation
+- Output images are saved automatically in the `output/` directory
