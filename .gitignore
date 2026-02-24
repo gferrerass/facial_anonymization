@@ -1,4 +1,4 @@
-# Entorno virtual
+# Virtual environment
 venv/
 env/
 ENV/
@@ -40,14 +40,12 @@ MANIFEST
 .DS_Store
 Thumbs.db
 
-# Modelos y output (archivos grandes)
+# Large files and directories
 ComfyUI/
-models/**/*.safetensors
-models/**/*.pt
-models/**/*.pth
-output/
-*.png
-*.jpg
-*.jpeg
+models/*
+!models/*/
+models/**/*
+!models/**/.gitkeep
+
 
 
