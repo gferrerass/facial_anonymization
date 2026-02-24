@@ -43,9 +43,15 @@ Thumbs.db
 # Large files and directories
 ComfyUI/
 models/*
-!models/*/
-models/**/*
-!models/**/.gitkeep
+!models/unet/
+!models/text_encoders/
+!models/vae/
+models/unet/*
+!models/unet/.gitkeep
+models/text_encoders/*
+!models/text_encoders/.gitkeep
+models/vae/*
+!models/vae/.gitkeep
 
 
 
