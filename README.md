@@ -1,6 +1,6 @@
-# Facial Anonymisation - ComfyUI Workflow
+# Facial Anonymisation
 
-Automated script for running a generative workflow with ComfyUI using advanced image generation models.
+Python application for facial anonymization through image generation, using ComfyUI as the processing engine with advanced generation models.
 
 ## Requirements
 
@@ -9,7 +9,7 @@ Automated script for running a generative workflow with ComfyUI using advanced i
 - **8GB+ VRAM** (recommended for smooth generation)
 - **16GB+ RAM** (minimum)
 - **50GB+ free disk space** (for models)
-- **Git** installed (optional, for ComfyUI download)
+- **Git** installed
 
 ## Project Structure
 
@@ -20,14 +20,14 @@ facial_anonymisation/
 ├── run.py                # Run script
 ├── requirements.txt      # Python dependencies
 ├── README.md             # This file
-├── ComfyUI/              # ComfyUI installation (auto-downloaded)
+├── ComfyUI/              # ComfyUI installation (auto-downloaded after setup)
 ├── models/
 │   ├── text_encoders/    # CLIP/Text encoder models
-│   ├── unet/             # Diffusion/UNET models
+│   ├── unet/             # Diffusion model
 │   └── vae/              # VAE encoder-decoder models
-├── input/                # Input directory (optional)
+├── input/                # Input directory
 ├── output/               # Generated output images
-└── venv/                 # Virtual environment
+└── venv/                 # Virtual environment (created after setup)
 ```
 
 ## Required Models
@@ -61,9 +61,14 @@ Before running, download and place these models in their respective folders:
 git clone <repository-url>
 cd facial_anonymisation
 
-# Run setup (creates virtual environment and installs dependencies)
+# Run setup (automatically creates virtual environment and installs all dependencies)
 python setup.py
 ```
+
+The `setup.py` script handles:
+- Creating a virtual environment in `venv/`
+- Installing all Python dependencies
+- Setting up ComfyUI
 
 ### Step 2: Download Models
 
@@ -72,33 +77,22 @@ Download the three required models listed above and place them in their respecti
 - `models/unet/z_image_turbo_bf16.safetensors`
 - `models/vae/ae.safetensors`
 
-### Step 3: Verify Installation
-
-```bash
-# Activate virtual environment (if needed)
-# Windows:
-venv\Scripts\activate
-# Linux/macOS:
-source venv/bin/activate
-```
-
 ## Usage
 
-### Running the Workflow
+### Running the Application
 
 ```bash
-# Simple execution
+# Simple execution (automatically uses the virtual environment created by setup.py)
 python run.py
-
-# Or directly
-python main.py
 ```
 
-The script will:
-1. Initialize ComfyUI
-2. Load all required models
-3. Process prompts and generate images
-4. Save outputs to the `output/` directory
+**Note:** No need to manually activate the virtual environment. The `run.py` script automatically activates it and runs the application.
+
+The Python application:
+1. Initializes the ComfyUI engine
+2. Loads all required models
+3. Processes prompts and generates images
+4. Saves outputs to the `output/` directory
 
 ### Example Output
 
@@ -134,73 +128,3 @@ Edit `main.py` to customize:
 - **Image Size:** Change `width` and `height` parameters (default: 1024x1024)
 - **Sampling Steps:** Adjust `steps` parameter (default: 9)
 - **Output Directory:** Change with `folder_paths.set_output_directory()`
-
-## File Descriptions
-
-| File | Description |
-|------|-------------|
-| `main.py` | Main script that executes the generation workflow |
-| `setup.py` | Sets up virtual environment and installs dependencies |
-| `run.py` | Convenient script to run main.py |
-| `requirements.txt` | List of Python dependencies |
-| `florence_generation.py` | Florence model utilities (optional) |
-
-## Troubleshooting
-
-### Model Not Found Error
-```
-FileNotFoundError: Model in folder 'xxx' with filename 'yyy' not found.
-```
-**Solution:** Ensure all three models are downloaded and placed in the correct directories.
-
-### CUDA/GPU Issues
-```
-RuntimeError: CUDA out of memory
-```
-**Solution:** 
-- Close other GPU-intensive applications
-- Reduce batch size
-- Ensure you have CUDA 11.8+ or higher installed
-- Check GPU drivers are up to date
-
-### Virtual Environment Issues
-```bash
-# Recreate virtual environment
-python -m venv venv
-python setup.py
-```
-
-## Performance Notes
-
-- First run will be slower (models loading)
-- GPU acceleration requires CUDA-compatible NVIDIA graphics card
-- Typical generation time per image: 8-15 seconds
-- Memory usage peaks during model loading (~12-14GB)
-
-## System Requirements Checklist
-
-- [ ] Python 3.10+
-- [ ] CUDA 11.8+ or 12.x
-- [ ] 8GB+ VRAM
-- [ ] 16GB+ System RAM
-- [ ] 50GB+ Free Storage
-- [ ] All three model files downloaded
-- [ ] Models placed in correct directories
-
-## Support
-
-For issues or questions, check:
-- ComfyUI documentation: https://github.com/comfyanonymous/ComfyUI
-- Model sources for download links
-- GPU driver compatibility
-
-## License
-
-[Add your license here]
-
-## Notes
-
-- Models are large files; ensure stable internet connection during download
-- First initialization downloads ComfyUI (~500MB)
-- Keep models in their designated folders for proper operation
-- Output images are saved automatically in the `output/` directory
