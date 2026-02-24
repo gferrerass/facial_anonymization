@@ -53,5 +53,17 @@ models/text_encoders/*
 models/vae/*
 !models/vae/.gitkeep
 
-
+# Images in input and output directories
+input/*.png
+input/*.jpg
+input/*.jpeg
+input/*.gif
+input/*.bmp
+input/*.webp
+output/*.png
+output/*.jpg
+output/*.jpeg
+output/*.gif
+output/*.bmp
+output/*.webp
 

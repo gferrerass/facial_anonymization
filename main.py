@@ -2,29 +2,50 @@ import os
 import random
 import sys
 import time
+import logging
+import warnings
+import io
 from typing import Sequence, Mapping, Any, Union
 import torch
 from pathlib import Path
 
 
+# ============================================================================
+# CONFIGURATION & INITIALIZATION
+# ============================================================================
+
+def suppress_verbose_logging() -> None:
+    """Suppress transformers and torch logging warnings for cleaner output."""
+    warnings.filterwarnings("ignore", category=FutureWarning)
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
+    warnings.filterwarnings("ignore")
+    
+    logging.basicConfig(level=logging.CRITICAL, force=True)
+    
+    for name in logging.root.manager.loggerDict:
+        if 'transformers' in name or 'torch' in name:
+            logging.getLogger(name).setLevel(logging.CRITICAL)
+            logging.getLogger(name).propagate = False
+    
+    class NullHandler(logging.Handler):
+        def emit(self, record):
+            pass
+    
+    transformers_logger = logging.getLogger("transformers")
+    transformers_logger.handlers = [NullHandler()]
+    transformers_logger.propagate = False
+
+
+# Suppress logging on import
+suppress_verbose_logging()
+
+
+# ============================================================================
+# UTILITY FUNCTIONS
+# ============================================================================
+
 def get_value_at_index(obj: Union[Sequence, Mapping], index: int) -> Any:
-    """Returns the value at the given index of a sequence or mapping.
-
-    If the object is a sequence (like list or string), returns the value at the given index.
-    If the object is a mapping (like a dictionary), returns the value at the index-th key.
-
-    Some return a dictionary, in these cases, we look for the "results" key
-
-    Args:
-        obj (Union[Sequence, Mapping]): The object to retrieve the value from.
-        index (int): The index of the value to retrieve.
-
-    Returns:
-        Any: The value at the given index.
-
-    Raises:
-        IndexError: If the index is out of bounds for the object and the object is not a mapping.
-    """
+    """Returns the value at the given index of a sequence or mapping."""
     try:
         return obj[index]
     except KeyError:
@@ -32,35 +53,24 @@ def get_value_at_index(obj: Union[Sequence, Mapping], index: int) -> Any:
 
 
 def find_path(name: str, path: str = None) -> str:
-    """
-    Recursively looks at parent folders starting from the given path until it finds the given name.
-    Returns the path as a Path object if found, or None otherwise.
-    """
-    # If no path is given, use the current working directory
+    """Recursively find a folder/file in parent directories."""
     if path is None:
         path = os.getcwd()
-
-    # Check if the current directory contains the name
+    
     if name in os.listdir(path):
         path_name = os.path.join(path, name)
         print(f"{name} found: {path_name}")
         return path_name
-
-    # Get the parent directory
+    
     parent_directory = os.path.dirname(path)
-
-    # If the parent directory is the same as the current directory, we've reached the root and stop the search
     if parent_directory == path:
         return None
-
-    # Recursively call the function with the parent directory
+    
     return find_path(name, parent_directory)
 
 
 def add_comfyui_directory_to_sys_path() -> None:
-    """
-    Add 'ComfyUI' to the sys.path
-    """
+    """Add ComfyUI directory to Python path."""
     for existing_path in sys.path:
         if os.path.basename(existing_path) == "ComfyUI" and os.path.isdir(existing_path):
             return
@@ -71,27 +81,21 @@ def add_comfyui_directory_to_sys_path() -> None:
 
 
 def add_extra_model_paths() -> None:
-    """
-    Parse the optional extra_model_paths.yaml file and add the parsed paths to the sys.path.
-    """
+    """Load extra model paths configuration."""
     try:
         from main import load_extra_path_config
     except ImportError:
-        # Silently try alternative import
         try:
             from utils.extra_config import load_extra_path_config
         except ImportError:
-            # No extra config available, skip silently
             return
 
     extra_model_paths = find_path("extra_model_paths.yaml")
-
     if extra_model_paths is not None:
         load_extra_path_config(extra_model_paths)
-    # File is optional, so no message if not found
 
 
-# Only execute once at module level
+# Initialize ComfyUI paths
 _initialized = False
 if not _initialized:
     add_comfyui_directory_to_sys_path()
@@ -99,30 +103,25 @@ if not _initialized:
     _initialized = True
 
 
+# ============================================================================
+# COMFYUI SETUP
+# ============================================================================
+
 def configure_local_paths() -> None:
-    """Configure ComfyUI to use local models and output directories in facial_anonymisation folder"""
+    """Configure ComfyUI to use local models and output directories."""
     import folder_paths
     
-    # Get the facial_anonymisation directory path
     facial_anonymisation_dir = Path(__file__).parent
     models_dir = facial_anonymisation_dir / "models"
     output_dir = facial_anonymisation_dir / "output"
     
-    # Create directories if they don't exist
     models_dir.mkdir(exist_ok=True)
     output_dir.mkdir(exist_ok=True)
     
-    # Create subdirectories for different model types
-    (models_dir / "text_encoders").mkdir(exist_ok=True)
-    (models_dir / "unet").mkdir(exist_ok=True)
-    (models_dir / "vae").mkdir(exist_ok=True)
+    for subdir in ["text_encoders", "unet", "vae"]:
+        (models_dir / subdir).mkdir(exist_ok=True)
+        folder_paths.add_model_folder_path(subdir, str(models_dir / subdir))
     
-    # Configure folder_paths to use local directories
-    folder_paths.add_model_folder_path("text_encoders", str(models_dir / "text_encoders"))
-    folder_paths.add_model_folder_path("unet", str(models_dir / "unet"))
-    folder_paths.add_model_folder_path("vae", str(models_dir / "vae"))
-    
-    # Configure output directory
     folder_paths.set_output_directory(str(output_dir))
     
     print(f"✓ Models directory: {models_dir}")
@@ -130,137 +129,226 @@ def configure_local_paths() -> None:
 
 
 def import_custom_nodes() -> None:
-    """Find all custom nodes in the custom_nodes folder and add those node objects to NODE_CLASS_MAPPINGS
-
-    This function sets up a new asyncio event loop, initializes the PromptServer,
-    creates a PromptQueue, and initializes the custom nodes.
-    """
+    """Initialize ComfyUI custom nodes."""
     import asyncio
     import execution
     from nodes import init_extra_nodes
     import server
 
-    # Creating a new event loop and setting it as the default loop
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
-    # Creating an instance of PromptServer with the loop
     server_instance = server.PromptServer(loop)
     execution.PromptQueue(server_instance)
-
-    # Initializing custom nodes (init_extra_nodes is async, so use loop.run_until_complete)
     loop.run_until_complete(init_extra_nodes())
 
 
 from nodes import NODE_CLASS_MAPPINGS
 
 
+# ============================================================================
+# MODEL LOADING
+# ============================================================================
+
+def load_models():
+    """Load all required models once at startup."""
+    print("\n▶ Loading models...")
+    models_load_start = time.time()
+    
+    # Load CLIP model
+    cliploader = NODE_CLASS_MAPPINGS["CLIPLoader"]()
+    cliploader_39 = cliploader.load_clip(
+        clip_name="qwen_3_4b.safetensors", 
+        type="lumina2", 
+        device="default"
+    )
+    
+    # Load Florence2 model for captioning
+    florence2_loader = NODE_CLASS_MAPPINGS["DownloadAndLoadFlorence2Model"]()
+    florence2_model = florence2_loader.loadmodel(
+        model="MiaoshouAI/Florence-2-base-PromptGen-v1.5",
+        precision="fp16",
+        attention="sdpa",
+        convert_to_safetensors=False,
+    )
+    
+    # Load VAE decoder
+    vaeloader = NODE_CLASS_MAPPINGS["VAELoader"]()
+    vae = vaeloader.load_vae(vae_name="ae.safetensors")
+    
+    # Load UNET model
+    unetloader = NODE_CLASS_MAPPINGS["UNETLoader"]()
+    unet = unetloader.load_unet(
+        unet_name="z_image_turbo_bf16.safetensors", 
+        weight_dtype="default"
+    )
+    
+    models_load_time = time.time() - models_load_start
+    print(f"✓ Models loaded in {models_load_time:.2f} seconds\n")
+    
+    return {
+        "clip": cliploader_39,
+        "florence2_model": florence2_model,
+        "vae": vae,
+        "unet": unet,
+        "load_time": models_load_time,
+    }
+
+
+# ============================================================================
+# GENERATION WORKFLOW
+# ============================================================================
+
+def process_and_generate_image(idx, total, image_path, models):
+    """Complete workflow: load image → generate caption → generate new image."""
+    print(f"\n{'='*60}")
+    print(f"   GENERATING IMAGE {idx}/{total}")
+    print(f"{'='*60}")
+    print(f"Input image: {image_path}")
+    
+    gen_start_time = time.time()
+    
+    # --- STEP 1: Load input image ---
+    loadimage = NODE_CLASS_MAPPINGS["LoadImage"]()
+    loaded_image = loadimage.load_image(image=image_path)
+    
+    # --- STEP 2: Generate caption from image using Florence2 ---
+    florence2run = NODE_CLASS_MAPPINGS["Florence2Run"]()
+    
+    old_stdout, old_stderr = sys.stdout, sys.stderr
+    sys.stdout = io.StringIO()
+    sys.stderr = io.StringIO()
+    
+    try:
+        caption_result = florence2run.encode(
+            text_input="",
+            task="more_detailed_caption",
+            fill_mask=True,
+            keep_model_loaded=False,
+            max_new_tokens=1024,
+            num_beams=3,
+            do_sample=True,
+            output_mask_select="",
+            seed=random.randint(1, 2**64),
+            image=get_value_at_index(loaded_image, 0),
+            florence2_model=get_value_at_index(models["florence2_model"], 0),
+        )
+    finally:
+        sys.stdout, sys.stderr = old_stdout, old_stderr
+    
+    caption = get_value_at_index(caption_result, 2)
+    print(f"Generated caption: {caption}")
+    
+    # --- STEP 3: Generate new image from caption ---
+    cliptextencode = NODE_CLASS_MAPPINGS["CLIPTextEncode"]()
+    emptylatentimage = NODE_CLASS_MAPPINGS["EmptyLatentImage"]()
+    modelsamplingauraflow = NODE_CLASS_MAPPINGS["ModelSamplingAuraFlow"]()
+    conditioningzeroout = NODE_CLASS_MAPPINGS["ConditioningZeroOut"]()
+    ksampler = NODE_CLASS_MAPPINGS["KSampler"]()
+    vaedecode = NODE_CLASS_MAPPINGS["VAEDecode"]()
+    saveimage = NODE_CLASS_MAPPINGS["SaveImage"]()
+    
+    # Encode caption for image generation
+    positive_conditioning = cliptextencode.encode(
+        text=caption,
+        clip=get_value_at_index(models["clip"], 0),
+    )
+    
+    # Create latent representation
+    latent_image = emptylatentimage.generate(width=1024, height=1024, batch_size=1)
+    model_patched = modelsamplingauraflow.patch_aura(
+        shift=1, model=get_value_at_index(models["unet"], 0)
+    )
+    negative_conditioning = conditioningzeroout.zero_out(
+        conditioning=get_value_at_index(positive_conditioning, 0)
+    )
+    
+    # Sample and decode
+    samples = ksampler.sample(
+        seed=random.randint(1, 2**64),
+        steps=9,
+        cfg=1,
+        sampler_name="res_multistep",
+        scheduler="simple",
+        denoise=1,
+        model=get_value_at_index(model_patched, 0),
+        positive=get_value_at_index(positive_conditioning, 0),
+        negative=get_value_at_index(negative_conditioning, 0),
+        latent_image=get_value_at_index(latent_image, 0),
+    )
+    
+    decoded = vaedecode.decode(
+        samples=get_value_at_index(samples, 0),
+        vae=get_value_at_index(models["vae"], 0),
+    )
+    
+    # Save generated image
+    saveimage.save_images(
+        filename_prefix=f"z-image_{idx}",
+        images=get_value_at_index(decoded, 0)
+    )
+    
+    gen_time = time.time() - gen_start_time
+    print(f"✓ Image {idx} generated in {gen_time:.2f} seconds")
+
+
+# ============================================================================
+# MAIN
+# ============================================================================
+
+def get_input_images():
+    """Collect valid image files from input folder."""
+    images = []
+    input_folder = Path(__file__).parent / "input"
+    valid_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff'}
+    
+    if not input_folder.exists():
+        return images
+    
+    for image_file in input_folder.iterdir():
+        if image_file.is_file() and image_file.suffix.lower() in valid_extensions:
+            images.append(str(image_file))
+    
+    return sorted(images)
+
+
 def main():
+    """Main execution function."""
+    # Setup
     configure_local_paths()
     import_custom_nodes()
     
-    # List of prompts for multiple generations
-    prompts = [
-        "Cinematic portrait of a futuristic cyberpunk woman, neon blue lighting, high detail skin texture, wearing reflective visor, bokeh background, 8k resolution, hyper-realistic.",
-        "Professional portrait of a businessman in modern office, natural lighting, confident expression, sharp focus, 4k quality.",
-        "Artistic portrait of a young woman with colorful paint splashes, creative studio lighting, vibrant colors, high detail."
-    ]
+    # Get input images
+    images = get_input_images()
+    if not images:
+        print("No images found in input folder!")
+        return
     
+    # Header
     print("\n" + "="*60)
-    print(f"   STARTING BATCH IMAGE GENERATION ({len(prompts)} images)")
+    print(f"   BATCH CAPTION-TO-IMAGE GENERATION ({len(images)} images)")
     print("="*60)
     total_start_time = time.time()
     
     with torch.inference_mode():
-        # Load models once (they will be reused for all generations)
-        print("\n▶ Loading models...")
-        models_load_start = time.time()
+        # Load all models once
+        models = load_models()
         
-        cliploader = NODE_CLASS_MAPPINGS["CLIPLoader"]()
-        cliploader_39 = cliploader.load_clip(
-            clip_name="qwen_3_4b.safetensors", type="lumina2", device="default"
-        )
-
-        vaeloader = NODE_CLASS_MAPPINGS["VAELoader"]()
-        vaeloader_40 = vaeloader.load_vae(vae_name="ae.safetensors")
-
-        unetloader = NODE_CLASS_MAPPINGS["UNETLoader"]()
-        unetloader_46 = unetloader.load_unet(
-            unet_name="z_image_turbo_bf16.safetensors", weight_dtype="default"
-        )
-        
-        models_load_time = time.time() - models_load_start
-        print(f"✓ Models loaded in {models_load_time:.2f} seconds")
-
-        emptylatentimage = NODE_CLASS_MAPPINGS["EmptyLatentImage"]()
-        cliptextencode = NODE_CLASS_MAPPINGS["CLIPTextEncode"]()
-        modelsamplingauraflow = NODE_CLASS_MAPPINGS["ModelSamplingAuraFlow"]()
-        conditioningzeroout = NODE_CLASS_MAPPINGS["ConditioningZeroOut"]()
-        ksampler = NODE_CLASS_MAPPINGS["KSampler"]()
-        vaedecode = NODE_CLASS_MAPPINGS["VAEDecode"]()
-        saveimage = NODE_CLASS_MAPPINGS["SaveImage"]()
-
-        # Generate images for each prompt
-        for idx, prompt_text in enumerate(prompts, start=1):
-            print(f"\n{'='*60}")
-            print(f"   GENERATING IMAGE {idx}/{len(prompts)}")
-            print(f"{'='*60}")
-            print(f"Prompt: {prompt_text[:80]}...")
-            
-            gen_start_time = time.time()
-            
-            emptylatentimage_41 = emptylatentimage.generate(
-                width=1024, height=1024, batch_size=1
-            )
-
-            cliptextencode_45 = cliptextencode.encode(
-                text=prompt_text,
-                clip=get_value_at_index(cliploader_39, 0),
-            )
-
-            modelsamplingauraflow_47 = modelsamplingauraflow.patch_aura(
-                shift=1, model=get_value_at_index(unetloader_46, 0)
-            )
-
-            conditioningzeroout_42 = conditioningzeroout.zero_out(
-                conditioning=get_value_at_index(cliptextencode_45, 0)
-            )
-
-            ksampler_44 = ksampler.sample(
-                seed=random.randint(1, 2**64),
-                steps=9,
-                cfg=1,
-                sampler_name="res_multistep",
-                scheduler="simple",
-                denoise=1,
-                model=get_value_at_index(modelsamplingauraflow_47, 0),
-                positive=get_value_at_index(cliptextencode_45, 0),
-                negative=get_value_at_index(conditioningzeroout_42, 0),
-                latent_image=get_value_at_index(emptylatentimage_41, 0),
-            )
-
-            vaedecode_43 = vaedecode.decode(
-                samples=get_value_at_index(ksampler_44, 0),
-                vae=get_value_at_index(vaeloader_40, 0),
-            )
-
-            saveimage_9 = saveimage.save_images(
-                filename_prefix=f"z-image_{idx}", images=get_value_at_index(vaedecode_43, 0)
-            )
-            
-            gen_time = time.time() - gen_start_time
-            print(f"✓ Image {idx} generated in {gen_time:.2f} seconds")
+        # Process each image
+        for idx, image_path in enumerate(images, start=1):
+            process_and_generate_image(idx, len(images), image_path, models)
     
+    # Summary
     total_time = time.time() - total_start_time
-    avg_time = total_time / len(prompts)
+    avg_time = (total_time - models["load_time"]) / len(images) if images else 0
     
     print("\n" + "="*60)
     print("   BATCH GENERATION COMPLETED")
     print("="*60)
-    print(f"✓ Total images: {len(prompts)}")
-    print(f"✓ Total time: {total_time:.2f} seconds ({total_time/60:.2f} minutes)")
-    print(f"✓ Average time per image: {avg_time:.2f} seconds")
-    print(f"✓ Models load time: {models_load_time:.2f} seconds")
+    print(f"✓ Total images: {len(images)}")
+    print(f"✓ Total time: {total_time:.2f}s ({total_time/60:.2f}m)")
+    print(f"✓ Models load time: {models['load_time']:.2f}s")
+    print(f"✓ Average time per image: {avg_time:.2f}s")
     print("="*60 + "\n")
 
 

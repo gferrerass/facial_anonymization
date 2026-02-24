@@ -1,6 +1,6 @@
 # Facial Anonymisation
 
-Python application for facial anonymization through image generation, using ComfyUI as the processing engine with advanced generation models.
+Python application for facial anonymisation through image generation, using ComfyUI as the processing engine with advanced generation models.
 
 ## Requirements
 
@@ -40,7 +40,7 @@ Before running, download and place these models in their respective folders:
 - **Filename:** `qwen_3_4b.safetensors`
 - **Purpose:** Text prompt processing
 
-### 2. Z-Image Turbo (UNET)
+### 2. Z-Image Turbo (Diffusion model)
 - **Size:** ~2.5GB
 - **Location:** `models/unet/`
 - **Filename:** `z_image_turbo_bf16.safetensors`
@@ -93,38 +93,3 @@ The Python application:
 2. Loads all required models
 3. Processes prompts and generates images
 4. Saves outputs to the `output/` directory
-
-### Example Output
-
-```
-============================================================
-   STARTING BATCH IMAGE GENERATION (3 images)
-============================================================
-
-▶ Loading models...
-✓ Models loaded in 15.23 seconds
-
-============================================================
-   GENERATING IMAGE 1/3
-============================================================
-Prompt: Cinematic portrait of a futuristic cyberpunk woman...
-
-✓ Image 1 generated in 8.45 seconds
-
-============================================================
-   BATCH GENERATION COMPLETED
-============================================================
-✓ Total images: 3
-✓ Total time: 25.34 seconds (0.42 minutes)
-✓ Average time per image: 8.45 seconds
-============================================================
-```
-
-## Configuration
-
-Edit `main.py` to customize:
-
-- **Prompts:** Modify the `prompts` list to generate different images
-- **Image Size:** Change `width` and `height` parameters (default: 1024x1024)
-- **Sampling Steps:** Adjust `steps` parameter (default: 9)
-- **Output Directory:** Change with `folder_paths.set_output_directory()`
