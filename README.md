@@ -36,7 +36,9 @@ facial_anonymization/
 ├── models/
 │   ├── text_encoders/    # CLIP/Text encoder models
 │   ├── unet/             # Diffusion model
-│   └── vae/              # VAE encoder-decoder models
+│   ├── vae/              # VAE encoder-decoder models
+│   └── ultralytics/
+│       └── bbox/         # YOLO face detector
 ├── input/                # Input directory
 ├── output/               # Generated output images
 └── venv/                 # Virtual environment (created after setup)
@@ -64,6 +66,11 @@ Before running, download and place these models in their respective folders:
 - **Filename:** `ae.safetensors`
 - **Purpose:** Latent encoding/decoding
 
+### 4. YOLOv8 Face Detector
+- **Location:** `models/ultralytics/bbox/`
+- **Filename:** `face_yolov8m.pt`
+- **Purpose:** Face detection
+
 ## Installation
 
 ### Step 1: Clone and Setup the Environment
@@ -88,6 +95,7 @@ Download the three required models listed above and place them in their respecti
 - `models/text_encoders/qwen_3_4b.safetensors`
 - `models/unet/z_image_turbo_bf16.safetensors`
 - `models/vae/ae.safetensors`
+- `models/ultralytics/bbox/face_yolov8m.pt`
 
 ## Usage
 
