@@ -1,6 +1,6 @@
-# Facial Anonymisation
+# Facial anonymization
 
-Python application for facial anonymisation through image generation, using ComfyUI as the processing engine with advanced generation models.
+Python application for facial anonymization through image generation, using ComfyUI as the processing engine with advanced generation models.
 
 ## Requirements
 
@@ -11,10 +11,22 @@ Python application for facial anonymisation through image generation, using Comf
 - **50GB+ free disk space** (for models)
 - **Git** installed
 
+## Custom Nodes (Auto-installed)
+
+The setup script automatically installs these ComfyUI custom nodes:
+
+1. **ComfyUI-Florence2** - Image captioning and visual understanding
+2. **ComfyUI-Impact-Pack** - Face detection and segmentation tools
+3. **ComfyUI-Impact-Subpack** - Ultralytics YOLO integration
+4. **ComfyUI-KJNodes** - Advanced mask operations
+5. **ComfyUI-Inpaint-CropAndStitch** - Intelligent inpainting workflow
+
+All dependencies for these nodes (including OpenCV, Ultralytics, etc.) are automatically installed during setup.
+
 ## Project Structure
 
 ```
-facial_anonymisation/
+facial_anonymization/
 ├── main.py               # Main execution script
 ├── setup.py              # Setup script
 ├── run.py                # Run script
@@ -59,7 +71,7 @@ Before running, download and place these models in their respective folders:
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd facial_anonymisation
+cd facial_anonymization
 
 # Run setup (automatically creates virtual environment and installs all dependencies)
 python setup.py

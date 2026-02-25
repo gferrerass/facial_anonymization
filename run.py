@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Run script for Facial Anonymisation project.
+Run script for Facial Anonymization project.
 Activates virtual environment and runs main2.py
 """
 
@@ -12,7 +12,7 @@ from pathlib import Path
 
 def main():
     print("\n" + "="*60)
-    print("   FACIAL ANONYMISATION - Starting Workflow")
+    print("   FACIAL ANONYMIZATION - Starting Workflow")
     print("="*60)
     
     venv_dir = Path("venv")
@@ -39,7 +39,7 @@ def main():
     
     print(f"\n✓ Virtual environment found")
     print(f"✓ Python: {python_exe}")
-    print(f"\nStarting Facial Anonymisation workflow...\n")
+    print(f"\nStarting Facial Anonymization workflow...\n")
     
     # Run main.py
     try:

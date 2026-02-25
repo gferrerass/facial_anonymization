@@ -52,6 +52,8 @@ models/text_encoders/*
 !models/text_encoders/.gitkeep
 models/vae/*
 !models/vae/.gitkeep
+models/detection/*
+!models/detection/.gitkeep
 
 # Images in input and output directories
 input/*.png
