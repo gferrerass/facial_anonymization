@@ -46,14 +46,16 @@ models/*
 !models/unet/
 !models/text_encoders/
 !models/vae/
+!models/ultralytics/
+!models/ultralytics/bbox/
 models/unet/*
 !models/unet/.gitkeep
 models/text_encoders/*
 !models/text_encoders/.gitkeep
 models/vae/*
 !models/vae/.gitkeep
-models/detection/*
-!models/detection/.gitkeep
+models/ultralytics/bbox/*
+!models/ultralytics/bbox/.gitkeep
 
 # Images in input and output directories
 input/*.png
