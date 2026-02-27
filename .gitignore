@@ -48,6 +48,7 @@ models/*
 !models/vae/
 !models/ultralytics/
 !models/ultralytics/bbox/
+!models/controlnet/
 models/unet/*
 !models/unet/.gitkeep
 models/text_encoders/*
@@ -56,6 +57,8 @@ models/vae/*
 !models/vae/.gitkeep
 models/ultralytics/bbox/*
 !models/ultralytics/bbox/.gitkeep
+models/controlnet/*
+!models/controlnet/.gitkeep
 
 # Images in input and output directories
 input/*.png

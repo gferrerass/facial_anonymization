@@ -1,16 +1,65 @@
 #!/usr/bin/env python3
 """
 Run script for Facial Anonymization project.
-Activates virtual environment and runs main2.py
+Activates virtual environment and runs main.py with optional parameters.
 """
 
 import os
 import sys
 import platform
 import subprocess
+import argparse
 from pathlib import Path
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="Facial Anonymization - Batch face inpainting using ComfyUI",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python run.py
+  python run.py --strength 0.8 --denoise 0.7
+  python run.py --input custom_input --output custom_output --max-images 5
+  python run.py --strength 0.5 --denoise 0.5 --input ./photos --output ./results
+        """
+    )
+    
+    parser.add_argument(
+        "--strength",
+        type=float,
+        default=0.7,
+        help="ControlNet strength (0.0-1.0). Higher values = stronger edge guidance. Default: 0.7"
+    )
+    
+    parser.add_argument(
+        "--denoise",
+        type=float,
+        default=0.6,
+        help="Denoising strength (0.0-1.0). Higher values = more changes. Default: 0.6"
+    )
+    
+    parser.add_argument(
+        "--input",
+        type=str,
+        default="input",
+        help="Input directory path (absolute or relative). Default: input"
+    )
+    
+    parser.add_argument(
+        "--output",
+        type=str,
+        default="output",
+        help="Output directory path (absolute or relative). Default: output"
+    )
+    
+    parser.add_argument(
+        "--max-images",
+        type=int,
+        default=None,
+        help="Maximum number of images to process. Default: all images"
+    )
+    
+    args = parser.parse_args()
     print("\n" + "="*60)
     print("   FACIAL ANONYMIZATION - Starting Workflow")
     print("="*60)
@@ -39,12 +88,30 @@ def main():
     
     print(f"\n✓ Virtual environment found")
     print(f"✓ Python: {python_exe}")
+    
+    # Show configuration
+    print(f"\nConfiguration:")
+    print(f"   ControlNet strength: {args.strength}")
+    print(f"   Denoise strength: {args.denoise}")
+    print(f"   Input directory: {args.input}")
+    print(f"   Output directory: {args.output}")
+    if args.max_images:
+        print(f"   Max images: {args.max_images}")
     print(f"\nStarting Facial Anonymization workflow...\n")
+    
+    # Build command with arguments
+    cmd = [python_exe, "main.py"]
+    cmd.extend(["--strength", str(args.strength)])
+    cmd.extend(["--denoise", str(args.denoise)])
+    cmd.extend(["--input", args.input])
+    cmd.extend(["--output", args.output])
+    if args.max_images:
+        cmd.extend(["--max-images", str(args.max_images)])
     
     # Run main.py
     try:
         result = subprocess.run(
-            [python_exe, "main.py"],
+            cmd,
             cwd=Path(__file__).parent,
             check=False
         )

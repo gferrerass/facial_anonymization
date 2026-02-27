@@ -199,6 +199,36 @@ def ensure_kjnodes_repo(comfyui_dir: Path) -> Path:
     print(f"✓ ComfyUI-KJNodes downloaded to: {kjnodes_dir}")
     return kjnodes_dir
 
+def ensure_controlnet_aux_repo(comfyui_dir: Path) -> Path:
+    """Ensure comfyui_controlnet_aux repo exists in ComfyUI/custom_nodes. Returns path or None."""
+    if comfyui_dir is None:
+        return None
+    
+    custom_nodes_dir = comfyui_dir / "custom_nodes"
+    controlnet_aux_dir = custom_nodes_dir / "comfyui_controlnet_aux"
+    
+    if controlnet_aux_dir.exists():
+        print(f"\n✓ comfyui_controlnet_aux found at: {controlnet_aux_dir}")
+        return controlnet_aux_dir
+
+    print(f"\n{'='*60}")
+    print("▶ comfyui_controlnet_aux not found. Downloading...")
+    print(f"{'='*60}")
+
+    git_check = subprocess.run(["git", "--version"], capture_output=True, text=True)
+    if git_check.returncode != 0:
+        print("✗ Git is not available. Please install Git and re-run setup.")
+        return None
+
+    clone_cmd = ["git", "clone", "https://github.com/Fannovel16/comfyui_controlnet_aux.git", str(controlnet_aux_dir)]
+    result = subprocess.run(clone_cmd, capture_output=False)
+    if result.returncode != 0:
+        print("✗ Failed to download comfyui_controlnet_aux")
+        return None
+
+    print(f"✓ comfyui_controlnet_aux downloaded to: {controlnet_aux_dir}")
+    return controlnet_aux_dir
+
 def collect_custom_nodes_dependencies(comfyui_dir: Path) -> dict:
     """
     Collect all dependencies from custom_nodes requirements.txt files.
@@ -219,7 +249,8 @@ def collect_custom_nodes_dependencies(comfyui_dir: Path) -> dict:
         "ComfyUI-Impact-Pack",
         "ComfyUI-Impact-Subpack",
         "ComfyUI-KJNodes",
-        "ComfyUI-Inpaint-CropAndStitch"
+        "ComfyUI-Inpaint-CropAndStitch",
+        "comfyui_controlnet_aux"
     ]
     
     for custom_node in custom_nodes_to_check:
@@ -334,7 +365,8 @@ def verify_custom_nodes_installation(comfyui_dir: Path) -> bool:
         "ComfyUI-Impact-Pack": "Face detection with BboxDetectorCombined",
         "ComfyUI-Impact-Subpack": "Ultralytics YOLO detector",
         "ComfyUI-KJNodes": "Mask operations (GrowMaskWithBlur)",
-        "ComfyUI-Inpaint-CropAndStitch": "Inpainting crop and stitch operations"
+        "ComfyUI-Inpaint-CropAndStitch": "Inpainting crop and stitch operations",
+        "comfyui_controlnet_aux": "ControlNet auxiliary nodes (preprocessors)"
     }
     
     all_present = True
@@ -481,6 +513,7 @@ def main():
     impact_pack_dir = ensure_impact_pack_repo(comfyui_dir)
     impact_subpack_dir = ensure_impact_subpack_repo(comfyui_dir)
     kjnodes_dir = ensure_kjnodes_repo(comfyui_dir)
+    controlnet_aux_dir = ensure_controlnet_aux_repo(comfyui_dir)
     
     # Install all custom_nodes dependencies in consolidated manner
     install_custom_nodes_dependencies(python_exe, comfyui_dir)

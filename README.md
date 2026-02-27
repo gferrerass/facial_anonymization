@@ -37,6 +37,7 @@ facial_anonymization/
 │   ├── text_encoders/    # CLIP/Text encoder models
 │   ├── unet/             # Diffusion model
 │   ├── vae/              # VAE encoder-decoder models
+│   ├── controlnet/       # ControlNet models (edge guidance)
 │   └── ultralytics/
 │       └── bbox/         # YOLO face detector
 ├── input/                # Input directory
@@ -71,6 +72,12 @@ Before running, download and place these models in their respective folders:
 - **Filename:** `face_yolov8m.pt`
 - **Purpose:** Face detection
 
+### 5. Z-Image-Turbo ControlNet Union
+- **Size:** ~350MB
+- **Location:** `models/controlnet/`
+- **Filename:** `Z-Image-Turbo-Fun-Controlnet-Union.safetensors`
+- **Purpose:** Edge-based guidance for improved face inpainting (uses Canny edge detection)
+
 ## Installation
 
 ### Step 1: Clone and Setup the Environment
@@ -91,25 +98,82 @@ The `setup.py` script handles:
 
 ### Step 2: Download Models
 
-Download the three required models listed above and place them in their respective directories:
+Download the models listed above and place them in their respective directories:
 - `models/text_encoders/qwen_3_4b.safetensors`
 - `models/unet/z_image_turbo_bf16.safetensors`
 - `models/vae/ae.safetensors`
 - `models/ultralytics/bbox/face_yolov8m.pt`
+- `models/controlnet/Z-Image-Turbo-Fun-Controlnet-Union.safetensors`
 
 ## Usage
 
-### Running the Application
+### Basic Usage
 
 ```bash
-# Simple execution (automatically uses the virtual environment created by setup.py)
+# Simple execution with default settings
 python run.py
 ```
 
 **Note:** No need to manually activate the virtual environment. The `run.py` script automatically activates it and runs the application.
 
-The Python application:
-1. Initializes the ComfyUI engine
-2. Loads all required models
-3. Processes prompts and generates images
-4. Saves outputs to the `output/` directory
+### Advanced Usage with Parameters
+
+You can customize the anonymization process using command-line parameters:
+
+```bash
+# General syntax
+python run.py [--strength VALUE] [--denoise VALUE] [--input DIR] [--output DIR] [--max-images N]
+```
+
+#### Available Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `--strength` | float | 0.7 | ControlNet strength (0.0-1.0). Higher values = stronger edge guidance for better structure preservation |
+| `--denoise` | float | 0.6 | Denoising strength (0.0-1.0). Higher values = more changes to the face |
+| `--input` | string | `input` | Input directory path (absolute or relative) |
+| `--output` | string | `output` | Output directory path (absolute or relative) |
+| `--max-images` | int | all | Maximum number of images to process |
+
+#### Usage Examples
+
+```bash
+# Use default settings (strength=0.7, denoise=0.6)
+python run.py
+
+# Stronger ControlNet guidance for better structure preservation
+python run.py --strength 0.9
+
+# More aggressive face modification
+python run.py --denoise 0.8
+
+# Combine parameters for fine control
+python run.py --strength 0.8 --denoise 0.7
+
+# Use custom input/output directories
+python run.py --input my_photos --output results
+
+# Process only the first 5 images
+python run.py --max-images 5
+
+# Complete custom configuration
+python run.py --strength 0.5 --denoise 0.5 --input ./photos --output ./anonymized --max-images 10
+
+# Show help and all available options
+python run.py --help
+```
+
+### How It Works
+
+The application workflow:
+1. Loads input images from the specified directory (default: `input/`)
+2. Detects faces using YOLOv8 face detection
+3. Generates a blurred mask around detected faces
+4. Applies Canny edge detection for ControlNet guidance
+5. Generates caption using Florence2 model
+6. Performs inpainting with Z-Image-Turbo model guided by ControlNet
+7. Stitches the result back into the original image
+8. Saves anonymized images to output directory (default: `output/`)
+
+**Output naming:** Processed images are saved with the original filename + `_anonymized` suffix.
+- Example: `photo1.jpg` → `photo1_anonymized.png`

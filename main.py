@@ -5,6 +5,7 @@ import time
 import logging
 import warnings
 import io
+import argparse
 from typing import Sequence, Mapping, Any, Union
 import torch
 from pathlib import Path
@@ -23,7 +24,7 @@ def suppress_verbose_logging() -> None:
     logging.basicConfig(level=logging.CRITICAL, force=True)
     
     for name in logging.root.manager.loggerDict:
-        if 'transformers' in name or 'torch' in name:
+        if 'transformers' in name or 'torch' in name or 'controlnet_aux' in name:
             logging.getLogger(name).setLevel(logging.CRITICAL)
             logging.getLogger(name).propagate = False
     
@@ -34,6 +35,9 @@ def suppress_verbose_logging() -> None:
     transformers_logger = logging.getLogger("transformers")
     transformers_logger.handlers = [NullHandler()]
     transformers_logger.propagate = False
+    
+    # Suppress ComfyUI custom nodes verbose output
+    os.environ['COMFYUI_CONTROLNET_AUX_VERBOSE'] = '0'
 
 
 # Suppress logging on import
@@ -107,13 +111,20 @@ if not _initialized:
 # COMFYUI SETUP
 # ============================================================================
 
-def configure_local_paths() -> None:
+def configure_local_paths(output_dir_override=None) -> None:
     """Configure ComfyUI to use local models and output directories."""
     import folder_paths
     
     facial_anonymization_dir = Path(__file__).parent
     models_dir = facial_anonymization_dir / "models"
-    output_dir = facial_anonymization_dir / "output"
+    
+    # Use override if provided, otherwise default
+    if output_dir_override:
+        output_dir = Path(output_dir_override)
+        if not output_dir.is_absolute():
+            output_dir = facial_anonymization_dir / output_dir
+    else:
+        output_dir = facial_anonymization_dir / "output"
     
     models_dir.mkdir(exist_ok=True)
     output_dir.mkdir(exist_ok=True)
@@ -122,6 +133,11 @@ def configure_local_paths() -> None:
     for subdir in ["text_encoders", "unet", "vae"]:
         (models_dir / subdir).mkdir(exist_ok=True)
         folder_paths.add_model_folder_path(subdir, str(models_dir / subdir))
+
+    # Configure model patches directory (ControlNet patches)
+    model_patches_dir = models_dir / "controlnet"
+    model_patches_dir.mkdir(parents=True, exist_ok=True)
+    folder_paths.add_model_folder_path("model_patches", str(model_patches_dir))
     
     # Configure ultralytics directories (required by Impact-Subpack)
     ultralytics_bbox_dir = models_dir / "ultralytics" / "bbox"
@@ -135,7 +151,6 @@ def configure_local_paths() -> None:
     folder_paths.set_output_directory(str(output_dir))
     
     print(f"✓ Models directory: {models_dir}")
-    print(f"✓ Output directory: {output_dir}")
 
 
 def import_custom_nodes() -> None:
@@ -150,7 +165,16 @@ def import_custom_nodes() -> None:
 
     server_instance = server.PromptServer(loop)
     execution.PromptQueue(server_instance)
-    loop.run_until_complete(init_extra_nodes())
+    
+    # Suppress verbose output from custom nodes during initialization
+    old_stdout, old_stderr = sys.stdout, sys.stderr
+    sys.stdout = io.StringIO()
+    sys.stderr = io.StringIO()
+    
+    try:
+        loop.run_until_complete(init_extra_nodes())
+    finally:
+        sys.stdout, sys.stderr = old_stdout, old_stderr
     
     # Manually load ComfyUI-Impact-Subpack if not loaded
     if "UltralyticsDetectorProvider" not in NODE_CLASS_MAPPINGS:
@@ -231,6 +255,12 @@ def load_models():
         unet_name="z_image_turbo_bf16.safetensors", 
         weight_dtype="default"
     )
+
+    # Load model patch (ControlNet)
+    modelpatchloader = NODE_CLASS_MAPPINGS["ModelPatchLoader"]()
+    model_patch = modelpatchloader.load_model_patch(
+        name="Z-Image-Turbo-Fun-Controlnet-Union.safetensors"
+    )
     
     models_load_time = time.time() - models_load_start
     print(f"✓ Models loaded in {models_load_time:.2f} seconds\n")
@@ -241,6 +271,7 @@ def load_models():
         "florence2_model": florence2_model,
         "vae": vae,
         "unet": unet,
+        "model_patch": model_patch,
         "load_time": models_load_time,
     }
 
@@ -249,14 +280,17 @@ def load_models():
 # GENERATION WORKFLOW
 # ============================================================================
 
-def process_and_generate_image(idx, total, image_path, models):
+def process_and_generate_image(idx, total, image_path, models, controlnet_strength=0.7, denoise_strength=0.6):
     """Complete workflow: load image → detect faces → inpaint faces with blurred mask."""
     from nodes import NODE_CLASS_MAPPINGS
     
     print(f"\n{'='*60}")
-    print(f"   PROCESSING IMAGE {idx}/{total}")
+    print(f"   GENERATING IMAGE {idx}/{total}")
     print(f"{'='*60}")
     print(f"Input image: {image_path}")
+    
+    # Extract original filename (without extension) for output naming
+    original_filename = Path(image_path).stem
     
     gen_start_time = time.time()
     
@@ -371,7 +405,16 @@ def process_and_generate_image(idx, total, image_path, models):
     )
     print("✓ Inpainting conditioning prepared")
     
-    # --- STEP 8: Apply model patches ---
+    # --- STEP 8: Apply Canny edge detection (ControlNet preprocessing) ---
+    aio_preprocessor = NODE_CLASS_MAPPINGS["AIO_Preprocessor"]()
+    canny_edges = aio_preprocessor.execute(
+        preprocessor="CannyEdgePreprocessor",
+        resolution=512,
+        image=get_value_at_index(inpaint_crop, 1),
+    )
+    print("✓ Canny edge detection applied")
+    
+    # --- STEP 9: Apply model patches ---
     modelsamplingauraflow = NODE_CLASS_MAPPINGS["ModelSamplingAuraFlow"]()
     model_patched = modelsamplingauraflow.patch_aura(
         shift=6,
@@ -383,8 +426,20 @@ def process_and_generate_image(idx, total, image_path, models):
         strength=1,
         model=get_value_at_index(model_patched, 0)
     )
+    print("✓ Model patches applied")
     
-    # --- STEP 9: Sample (inpaint) ---
+    # --- STEP 10: Apply QwenImageDiffsynth ControlNet ---
+    qwenimagediffsynthcontrolnet = NODE_CLASS_MAPPINGS["QwenImageDiffsynthControlnet"]()
+    model_with_controlnet = qwenimagediffsynthcontrolnet.diffsynth_controlnet(
+        strength=controlnet_strength,
+        model=get_value_at_index(model_differential, 0),
+        model_patch=get_value_at_index(models["model_patch"], 0),
+        vae=get_value_at_index(models["vae"], 0),
+        image=get_value_at_index(canny_edges, 0),
+    )
+    print(f"✓ ControlNet applied")
+    
+    # --- STEP 11: Sample (inpaint) ---
     ksampler = NODE_CLASS_MAPPINGS["KSampler"]()
     samples = ksampler.sample(
         seed=random.randint(1, 2**64),
@@ -392,22 +447,22 @@ def process_and_generate_image(idx, total, image_path, models):
         cfg=1,
         sampler_name="euler",
         scheduler="normal",
-        denoise=0.6,
-        model=get_value_at_index(model_differential, 0),
+        denoise=denoise_strength,
+        model=get_value_at_index(model_with_controlnet, 0),
         positive=get_value_at_index(inpaint_conditioning, 0),
         negative=get_value_at_index(inpaint_conditioning, 1),
         latent_image=get_value_at_index(inpaint_conditioning, 2),
     )
-    print("✓ Inpainting completed")
+    print(f"✓ Inpainting completed")
     
-    # --- STEP 10: Decode ---
+    # --- STEP 12: Decode ---
     vaedecode = NODE_CLASS_MAPPINGS["VAEDecode"]()
     decoded = vaedecode.decode(
         samples=get_value_at_index(samples, 0),
         vae=get_value_at_index(models["vae"], 0),
     )
     
-    # --- STEP 11: Stitch result back ---
+    # --- STEP 13: Stitch result back ---
     inpaintstitchimproved = NODE_CLASS_MAPPINGS["InpaintStitchImproved"]()
     final_image = inpaintstitchimproved.inpaint_stitch(
         stitcher=get_value_at_index(inpaint_crop, 0),
@@ -415,10 +470,10 @@ def process_and_generate_image(idx, total, image_path, models):
     )
     print("✓ Image stitched")
     
-    # --- STEP 12: Save result ---
+    # --- STEP 14: Save result ---
     saveimage = NODE_CLASS_MAPPINGS["SaveImage"]()
     saveimage.save_images(
-        filename_prefix=f"anonymized_{idx}",
+        filename_prefix=f"{original_filename}_anonymized",
         images=get_value_at_index(final_image, 0)
     )
     
@@ -430,32 +485,56 @@ def process_and_generate_image(idx, total, image_path, models):
 # MAIN
 # ============================================================================
 
-def get_input_images():
+def get_input_images(input_dir_override=None, max_images=None):
     """Collect valid image files from input folder."""
     images = []
-    input_folder = Path(__file__).parent / "input"
+    
+    # Use override if provided, otherwise default
+    if input_dir_override:
+        input_folder = Path(input_dir_override)
+        if not input_folder.is_absolute():
+            input_folder = Path(__file__).parent / input_dir_override
+    else:
+        input_folder = Path(__file__).parent / "input"
+    
     valid_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff'}
     
     if not input_folder.exists():
+        print(f"⚠ Input folder does not exist: {input_folder}")
         return images
     
     for image_file in input_folder.iterdir():
         if image_file.is_file() and image_file.suffix.lower() in valid_extensions:
             images.append(str(image_file))
     
-    return sorted(images)
+    images = sorted(images)
+    
+    # Limit number of images if specified
+    if max_images and max_images > 0:
+        images = images[:max_images]
+    
+    return images
 
 
 def main():
     """Main execution function."""
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description="Facial Anonymization using ComfyUI")
+    parser.add_argument("--strength", type=float, default=0.7, help="ControlNet strength (default: 0.7)")
+    parser.add_argument("--denoise", type=float, default=0.6, help="Denoise strength (default: 0.6)")
+    parser.add_argument("--input", type=str, default="input", help="Input directory (default: input)")
+    parser.add_argument("--output", type=str, default="output", help="Output directory (default: output)")
+    parser.add_argument("--max-images", type=int, default=None, help="Maximum number of images to process")
+    args = parser.parse_args()
+    
     # Setup
-    configure_local_paths()
+    configure_local_paths(output_dir_override=args.output)
     import_custom_nodes()
     
     # Get input images
-    images = get_input_images()
+    images = get_input_images(input_dir_override=args.input, max_images=args.max_images)
     if not images:
-        print("No images found in input folder!")
+        print(f"No images found in input folder: {args.input}")
         return
     
     # Header
@@ -470,7 +549,11 @@ def main():
         
         # Process each image
         for idx, image_path in enumerate(images, start=1):
-            process_and_generate_image(idx, len(images), image_path, models)
+            process_and_generate_image(
+                idx, len(images), image_path, models,
+                controlnet_strength=args.strength,
+                denoise_strength=args.denoise
+            )
     
     # Summary
     total_time = time.time() - total_start_time
