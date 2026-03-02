@@ -20,6 +20,7 @@ The setup script automatically installs these ComfyUI custom nodes:
 3. **ComfyUI-Impact-Subpack** - Ultralytics YOLO integration
 4. **ComfyUI-KJNodes** - Advanced mask operations
 5. **ComfyUI-Inpaint-CropAndStitch** - Intelligent inpainting workflow
+6. **comfyui_controlnet_aux** - ControlNet preprocessors (Canny edge detection, etc.)
 
 All dependencies for these nodes (including OpenCV, Ultralytics, etc.) are automatically installed during setup.
 
@@ -27,7 +28,7 @@ All dependencies for these nodes (including OpenCV, Ultralytics, etc.) are autom
 
 ```
 facial_anonymization/
-├── main.py               # Main execution script
+├── generate.py           # Main execution script
 ├── setup.py              # Setup script
 ├── run.py                # Run script
 ├── requirements.txt      # Python dependencies
@@ -141,39 +142,13 @@ python run.py [--strength VALUE] [--denoise VALUE] [--input DIR] [--output DIR] 
 # Use default settings (strength=0.7, denoise=0.6)
 python run.py
 
-# Stronger ControlNet guidance for better structure preservation
-python run.py --strength 0.9
-
-# More aggressive face modification
-python run.py --denoise 0.8
-
-# Combine parameters for fine control
-python run.py --strength 0.8 --denoise 0.7
-
-# Use custom input/output directories
-python run.py --input my_photos --output results
-
-# Process only the first 5 images
-python run.py --max-images 5
+# Stronger facial anonymization
+python run.py --strength 0.6 --denoise 0.75
 
 # Complete custom configuration
-python run.py --strength 0.5 --denoise 0.5 --input ./photos --output ./anonymized --max-images 10
+python run.py --strength 0.6 --denoise 0.7 --input ./photos --output ./anonymized --max-images 10
+
 
 # Show help and all available options
 python run.py --help
 ```
-
-### How It Works
-
-The application workflow:
-1. Loads input images from the specified directory (default: `input/`)
-2. Detects faces using YOLOv8 face detection
-3. Generates a blurred mask around detected faces
-4. Applies Canny edge detection for ControlNet guidance
-5. Generates caption using Florence2 model
-6. Performs inpainting with Z-Image-Turbo model guided by ControlNet
-7. Stitches the result back into the original image
-8. Saves anonymized images to output directory (default: `output/`)
-
-**Output naming:** Processed images are saved with the original filename + `_anonymized` suffix.
-- Example: `photo1.jpg` → `photo1_anonymized.png`

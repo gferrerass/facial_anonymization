@@ -470,7 +470,9 @@ def main():
         "einops>=0.6.0",
         "torchsde>=0.2.5",
         "av>=10.0.0",
-        "requests>=2.31.0"
+        "requests>=2.31.0",
+        "lpips>=0.1.4",
+        "open-clip-torch>=2.20.0"
     ]
     for dep in other_deps:
         result = subprocess.run(
