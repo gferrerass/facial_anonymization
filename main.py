@@ -8,18 +8,12 @@ Loads all models once at startup.
 import argparse
 import sys
 import time
-import warnings
 from pathlib import Path
 from typing import Any
 
 import torch
 
-# Suppress warnings
-warnings.filterwarnings("ignore", category=FutureWarning)
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-warnings.filterwarnings("ignore")
-
-# Import shared utilities (UTF-8 config already applied)
+# Import shared utilities (UTF-8 config and warnings already applied)
 from shared_utils import (
     ensure_running_in_venv,
     configure_local_paths,
@@ -27,6 +21,7 @@ from shared_utils import (
     load_image_cv2,
     get_input_images,
     build_argument_parser,
+    log_evaluation_result,
 )
 
 # Import generation utilities
@@ -50,7 +45,7 @@ def main():
     """Main execution function."""
     # Parse arguments first (so --help works without loading anything)
     parser = build_argument_parser(
-        description="Facial Anonymization with Evaluation - Iterative optimization with quality metrics",
+        description="Facial Anonymization with Evaluation",
         epilog="""
 Examples:
   python main.py
@@ -106,10 +101,9 @@ Examples:
         comfyui_models = load_comfyui_models()
         eval_models = load_evaluation_models()
         
-        print("="*60)
-        
         # Process each image with iterative optimization
         for idx, image_path in enumerate(images, start=1):
+            print("="*60)
             print(f"   PROCESSING IMAGE {idx}/{len(images)}")
             image_start_time = time.time()
             
@@ -163,6 +157,14 @@ Examples:
                         "lpips_score": lpips_score,
                         "success": True,
                     }
+                    
+                    # Log evaluation results immediately after evaluation
+                    log_evaluation_result(
+                        current_result["generated"],
+                        current_result["insightface_score"],
+                        current_result["clip_score"],
+                        current_result["lpips_score"]
+                    )
                     
                     # Check if metrics are satisfactory
                     if insightface_score < args.insightface_threshold:

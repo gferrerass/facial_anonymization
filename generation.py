@@ -10,18 +10,12 @@ import random
 import shutil
 import sys
 import time
-import warnings
 from pathlib import Path
 from typing import Any, Dict
 
 import torch
 
-# Suppress warnings
-warnings.filterwarnings("ignore", category=UserWarning)
-warnings.filterwarnings("ignore", category=FutureWarning)
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-
-# Import shared utilities (UTF-8 config already applied)
+# Import shared utilities (UTF-8 config and warnings already applied)
 from shared_utils import (
     ensure_running_in_venv,
     configure_local_paths,
@@ -202,7 +196,9 @@ def process_and_generate_image(
     
     caption = get_value_at_index(caption_result, 2)
     print("Generated caption:")
+    print("-"*60)
     print(caption)
+    print("-"*60)
     
     # Encode text conditioning
     cliptextencode = NODE_CLASS_MAPPINGS["CLIPTextEncode"]()
@@ -353,7 +349,7 @@ def main():
     """Main execution function."""
     # Parse arguments first (so --help works without loading anything)
     parser = build_argument_parser(
-        description="Facial Anonymization Generation - Generate anonymized face images using AI",
+        description="Facial Anonymization Generation",
         epilog="""
 Examples:
   python generation.py

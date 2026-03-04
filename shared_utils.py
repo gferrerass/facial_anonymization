@@ -4,12 +4,14 @@ Contains common functions used by main.py, generate.py, and evaluate.py.
 """
 
 import argparse
+import contextlib
 import io
 import logging
 import os
 import platform
 import subprocess
 import sys
+import warnings
 from pathlib import Path
 from typing import Any, Mapping, Sequence, Union
 
@@ -23,6 +25,32 @@ if sys.platform == 'win32':
         sys.stderr.reconfigure(encoding='utf-8')
     except Exception:
         pass  # Ignore if reconfigure is not available
+
+
+# ============================================================================
+# WARNING SUPPRESSION
+# ============================================================================
+
+# Suppress all warnings globally
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore")
+
+
+@contextlib.contextmanager
+def suppress_stdout_stderr():
+    """Context manager to suppress stdout and stderr."""
+    with open(os.devnull, 'w') as devnull:
+        old_stdout = sys.stdout
+        old_stderr = sys.stderr
+        try:
+            sys.stdout = devnull
+            sys.stderr = devnull
+            yield
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
 
 
 # ============================================================================
@@ -349,3 +377,32 @@ def build_argument_parser(description: str, epilog: str = "") -> "argparse.Argum
     )
     
     return parser
+
+
+# ============================================================================
+# LOGGING UTILITIES
+# ============================================================================
+
+def log_evaluation_result(image_name: str, insightface_score: float, clip_score: float, lpips_score: float) -> None:
+    """
+    Log evaluation results to logs.txt file.
+    Creates file with header on first write, appends subsequent entries.
+    
+    Args:
+        image_name: Name of the generated image file
+        insightface_score: InsightFace similarity score
+        clip_score: CLIP similarity score  
+        lpips_score: LPIPS perceptual distance score
+    """
+    log_file = Path(__file__).parent / "logs.txt"
+    
+    # Check if file exists to determine if we need to write header
+    file_exists = log_file.exists()
+    
+    with open(log_file, "a", encoding="utf-8") as f:
+        # Write header if file is new
+        if not file_exists:
+            f.write("Name Insightface_Score CLIP_Score LPIPS_Score\n")
+        
+        # Write evaluation result
+        f.write(f"{image_name} {insightface_score:.6f} {clip_score:.6f} {lpips_score:.6f}\n")

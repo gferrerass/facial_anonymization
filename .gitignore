@@ -40,6 +40,9 @@ MANIFEST
 .DS_Store
 Thumbs.db
 
+# Logs
+logs.txt
+
 # Large files and directories
 ComfyUI/
 models/*

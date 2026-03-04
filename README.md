@@ -1,224 +1,152 @@
 # Facial anonymization
 
-Python application for facial anonymization through image generation, using ComfyUI as the processing engine with advanced generation models.
+Aplicacion de anonimizacion facial basada en ComfyUI. El proyecto permite:
 
-## Requirements
+- Generar rostros anonimizados a partir de imagenes en `input/`.
+- Evaluar calidad y anonimato con metricas CLIP, LPIPS e InsightFace (opcional).
+- Ejecutar un flujo combinado de generacion + evaluacion iterativa.
 
-- **Python 3.10+** installed on your system
-- **CUDA 11.8+** or **CUDA 12.x** (for GPU acceleration)
-- **8GB+ VRAM** (recommended for smooth generation)
-- **16GB+ RAM** (minimum)
-- **50GB+ free disk space** (for models)
-- **Git** installed
+## Estado actual del repo
 
-### Windows Notes
+Los scripts principales existentes son:
 
-The setup script automatically handles all dependencies on Windows:
-- Installs required packages in the project virtual environment
-- No manual compilation or build tools needed for core functionality
+- `setup.py`: prepara entorno virtual, instala dependencias, ComfyUI y custom nodes.
+- `generation.py`: solo generacion de imagenes anonimizadas.
+- `evaluation.py`: solo evaluacion de un par de imagenes.
+- `main.py`: flujo completo (generacion + evaluacion iterativa).
+- `shared_utils.py`: utilidades compartidas.
 
-## Custom Nodes (Auto-installed)
+Nota: actualmente no existe `run.py`, `generate.py` ni `evaluate.py` en este repositorio.
 
-The setup script automatically installs these ComfyUI custom nodes:
+## Requisitos
 
-1. **ComfyUI-Florence2** - Image captioning and visual understanding
-2. **ComfyUI-Impact-Pack** - Face detection and segmentation tools
-3. **ComfyUI-Impact-Subpack** - Ultralytics YOLO integration
-4. **ComfyUI-KJNodes** - Advanced mask operations
-5. **ComfyUI-Inpaint-CropAndStitch** - Intelligent inpainting workflow
-6. **comfyui_controlnet_aux** - ControlNet preprocessors (Canny edge detection, etc.)
+- Python 3.10 o superior.
+- Git instalado.
+- GPU NVIDIA recomendada para rendimiento (si no, funciona en CPU con menor velocidad).
+- Espacio en disco para modelos (recomendado: 50 GB o mas).
 
-All dependencies for these nodes (including OpenCV, Ultralytics, etc.) are automatically installed during setup.
+## Instalacion
 
-### Evaluation Metrics
-
-The project includes advanced evaluation metrics for anonymized face quality:
-- **CLIP Similarity** - Semantic similarity using OpenAI CLIP
-- **LPIPS Distance** - Perceptual similarity using Learned Perceptual Image Patch Similarity
-- **InsightFace Similarity** - Face embedding cosine similarity (optional, requires `insightface` package)
-
-## Project Structure
-
-```
-facial_anonymization/
-├── main.py               # Generation + Evaluation workflow
-├── evaluate.py           # Evaluation only (for existing images)
-├── generate.py           # Generation only script
-├── setup.py              # Setup script
-├── run.py                # Run script
-├── requirements.txt      # Python dependencies
-├── README.md             # This file
-├── ComfyUI/              # ComfyUI installation (auto-downloaded after setup)
-├── models/
-│   ├── text_encoders/    # CLIP/Text encoder models
-│   ├── unet/             # Diffusion model
-│   ├── vae/              # VAE encoder-decoder models
-│   ├── controlnet/       # ControlNet models (edge guidance)
-│   └── ultralytics/
-│       └── bbox/         # YOLO face detector
-├── input/                # Input directory
-├── output/               # Generated output images
-└── venv/                 # Virtual environment (created after setup)
-```
-
-## Required Models
-
-Before running, download and place these models in their respective folders:
-
-### 1. Qwen 3.4B (Text Encoder)
-- **Size:** ~7GB
-- **Location:** `models/text_encoders/`
-- **Filename:** `qwen_3_4b.safetensors`
-- **Purpose:** Text prompt processing
-
-### 2. Z-Image Turbo (Diffusion model)
-- **Size:** ~2.5GB
-- **Location:** `models/unet/`
-- **Filename:** `z_image_turbo_bf16.safetensors`
-- **Purpose:** Image generation
-
-### 3. AE VAE (Autoencoder)
-- **Size:** ~200MB
-- **Location:** `models/vae/`
-- **Filename:** `ae.safetensors`
-- **Purpose:** Latent encoding/decoding
-
-### 4. YOLOv8 Face Detector
-- **Location:** `models/ultralytics/bbox/`
-- **Filename:** `face_yolov8m.pt`
-- **Purpose:** Face detection
-
-### 5. Z-Image-Turbo ControlNet Union
-- **Size:** ~350MB
-- **Location:** `models/controlnet/`
-- **Filename:** `Z-Image-Turbo-Fun-Controlnet-Union.safetensors`
-- **Purpose:** Edge-based guidance for improved face inpainting (uses Canny edge detection)
-
-## Installation
-
-### Step 1: Clone and Setup the Environment
+### 1. Clonar y entrar al proyecto
 
 ```bash
-# Clone the repository
 git clone <repository-url>
 cd facial_anonymization
+```
 
-# Run setup (automatically creates virtual environment and installs all dependencies)
+### 2. Ejecutar setup
+
+```bash
 python setup.py
 ```
 
-The `setup.py` script handles:
-- Creating a virtual environment in `venv/`
-- Installing all dependencies inside `venv` (no global Python pollution)
-- Setting up ComfyUI
-- Cloning and validating required custom nodes
-- Installing dependencies from each custom node `requirements.txt`
+`setup.py` realiza automaticamente:
 
-### Step 2: Download Models
+- Creacion de `venv/`.
+- Instalacion de dependencias Python en el entorno virtual.
+- Descarga/configuracion de `ComfyUI/`.
+- Instalacion de custom nodes requeridos.
 
-Download the models listed above and place them in their respective directories:
+Los scripts (`main.py`, `generation.py`, `evaluation.py`) intentan relanzarse dentro de `venv` si detectan que estas fuera del entorno virtual.
+
+## Modelos requeridos
+
+Descarga y coloca estos archivos en las rutas indicadas:
+
 - `models/text_encoders/qwen_3_4b.safetensors`
 - `models/unet/z_image_turbo_bf16.safetensors`
 - `models/vae/ae.safetensors`
 - `models/ultralytics/bbox/face_yolov8m.pt`
 - `models/controlnet/Z-Image-Turbo-Fun-Controlnet-Union.safetensors`
 
-## Usage
+## Uso
 
-### Basic Usage
-
-```bash
-# Simple execution with default settings
-python run.py
-```
-
-**Note:** No need to manually activate the virtual environment. The `run.py` script automatically activates it and runs the application.
-
-### Advanced Usage with Parameters
-
-You can customize the anonymization process using command-line parameters:
+### Flujo completo (recomendado)
 
 ```bash
-# General syntax
-python run.py [--strength VALUE] [--denoise VALUE] [--input DIR] [--output DIR] [--max-images N]
-```
-
-#### Available Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `--strength` | float | 0.7 | ControlNet strength (0.0-1.0). Higher values = stronger edge guidance for better structure preservation |
-| `--denoise` | float | 0.6 | Denoising strength (0.0-1.0). Higher values = more changes to the face |
-| `--input` | string | `input` | Input directory path (absolute or relative) |
-| `--output` | string | `output` | Output directory path (absolute or relative) |
-| `--max-images` | int | all | Maximum number of images to process |
-
-#### Usage Examples
-
-```bash
-# Use default settings (strength=0.7, denoise=0.6)
-python run.py
-
-# Stronger facial anonymization
-python run.py --strength 0.6 --denoise 0.75
-
-# Complete custom configuration
-python run.py --strength 0.6 --denoise 0.7 --input ./photos --output ./anonymized --max-images 10
-
-
-# Show help and all available options
-python run.py --help
-```
-
-## Evaluation
-
-The project includes two scripts for evaluating anonymized images:
-
-### Using `main.py` (Generation + Evaluation)
-
-The `main.py` script combines generation and evaluation in a single workflow. It loads all models once at startup and processes images with evaluation metrics.
-
-```bash
-# Run generation with automatic evaluation
 python main.py
-
-# With custom parameters
-python main.py --input photos --output results --strength 0.7 --denoise 0.6
 ```
 
-**Output:** Generates anonymized images and displays metrics for each:
-- CLIP Similarity
-- LPIPS Distance
-- InsightFace Similarity (if available)
+Este modo:
 
-### Using `evaluate.py` (Evaluation Only)
+- Genera imagen anonima.
+- Evalua metricas.
+- Ajusta `strength`/`denoise` por iteracion hasta cumplir umbrales o llegar a `--max-iterations`.
 
-Use this script to evaluate already generated images without running the generation process again.
+Ejemplos:
 
 ```bash
-# Evaluate a single pair of images
-python evaluate.py input/original.jpg output/original_anonymized_0001.png
-
-# Save face crops and open them
-python evaluate.py input/photo.jpg output/photo_anonymized_0001.png --show
-
-# Specify custom output directory for crops
-python evaluate.py input/photo.jpg output/photo_anonymized_0001.png --output-dir evaluation_results
+python main.py --input input --output output
+python main.py --strength 0.7 --denoise 0.6 --max-images 10
+python main.py --insightface-threshold 0.65 --clip-threshold 0.75 --lpips-threshold 0.3
 ```
 
-**Output:** Displays similarity metrics and saves cropped faces to a timestamped directory.
-
-### Installing InsightFace (Optional)
-
-For face embedding similarity metrics, install InsightFace:
+### Solo generacion
 
 ```bash
-# Activate virtual environment first
-.\venv\Scripts\activate  # Windows
-source venv/bin/activate  # Linux/Mac
-
-# Install InsightFace
-pip install insightface onnxruntime-gpu
+python generation.py
+python generation.py --input input --output output --strength 0.7 --denoise 0.6 --max-images 5
 ```
 
-If InsightFace is not installed, the scripts will skip this metric and display "N/A".
+### Solo evaluacion
+
+```bash
+python evaluation.py input/original.jpg output/original_anonymized_20260305_120000.png
+python evaluation.py input/original.jpg output/original_anonymized_20260305_120000.png --no_crop
+```
+
+## Parametros CLI
+
+### `main.py` y `generation.py`
+
+- `--input`: carpeta de entrada (default `input`).
+- `--output`: carpeta de salida (default `output`).
+- `--max-images`: maximo de imagenes a procesar.
+- `--strength`: fuerza de ControlNet (default `0.7`).
+- `--denoise`: denoise en sampling (default `0.6`).
+
+### Solo `main.py`
+
+- `--insightface-threshold` (default `0.65`).
+- `--clip-threshold` (default `0.75`).
+- `--lpips-threshold` (default `0.3`).
+- `--max-iterations` (default `3`).
+
+### Solo `evaluation.py`
+
+- `original`: ruta a imagen original.
+- `anonymized`: ruta a imagen anonimizada.
+- `--no_crop`: omite deteccion/crop de rostro (asume imagenes ya recortadas).
+
+## Metricas
+
+- CLIP similarity: similitud semantica global.
+- LPIPS distance: distancia perceptual.
+- InsightFace distance: distancia en embeddings faciales (si InsightFace esta disponible).
+
+Si InsightFace no esta instalado o no carga, el pipeline sigue funcionando y esa metrica se omite.
+
+## Estructura resumida
+
+```text
+facial_anonymization/
+|- main.py
+|- generation.py
+|- evaluation.py
+|- shared_utils.py
+|- setup.py
+|- requirements.txt
+|- README.md
+|- input/
+|- output/
+|- models/
+|- ComfyUI/
+`- venv/
+```
+
+## Troubleshooting rapido
+
+- Error de entorno virtual: verifica que exista `venv/` y reejecuta `python setup.py`.
+- Error por modelo faltante: confirma nombre exacto y carpeta en `models/`.
+- Sin deteccion facial en evaluacion: prueba `--no_crop` si tus imagenes ya estan recortadas.
+- Rendimiento bajo: usa GPU CUDA y reduce `--max-images` para pruebas.

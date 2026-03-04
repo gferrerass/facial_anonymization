@@ -4,13 +4,7 @@ Contains model loading and similarity metric functions.
 """
 
 import argparse
-import contextlib
-import os
-import platform
-import subprocess
-import sys
 import time
-import warnings
 from pathlib import Path
 from typing import Any, Tuple
 
@@ -21,26 +15,8 @@ import torch.nn.functional as F
 from PIL import Image
 from torchvision import transforms
 
-# Import ensure_running_in_venv and load_image_cv2 from shared_utils (UTF-8 config already applied there)
-from shared_utils import ensure_running_in_venv, load_image_cv2
-
-# Suppress warnings
-warnings.filterwarnings("ignore", category=UserWarning, module="torchvision")
-
-
-@contextlib.contextmanager
-def suppress_stdout_stderr():
-    """Context manager to suppress stdout and stderr."""
-    with open(os.devnull, 'w') as devnull:
-        old_stdout = sys.stdout
-        old_stderr = sys.stderr
-        try:
-            sys.stdout = devnull
-            sys.stderr = devnull
-            yield
-        finally:
-            sys.stdout = old_stdout
-            sys.stderr = old_stderr
+# Import utilities from shared_utils (UTF-8 config and warnings already applied there)
+from shared_utils import ensure_running_in_venv, load_image_cv2, suppress_stdout_stderr
 
 
 def load_evaluation_models():
