@@ -19,10 +19,8 @@ import torch.nn.functional as F
 from PIL import Image
 from torchvision import transforms
 
-# Configure UTF-8 encoding for Windows console
-if sys.platform == 'win32':
-    sys.stdout.reconfigure(encoding='utf-8')
-    sys.stderr.reconfigure(encoding='utf-8')
+# Import ensure_running_in_venv and load_image_cv2 from shared_utils (UTF-8 config already applied there)
+from shared_utils import ensure_running_in_venv, load_image_cv2
 
 # Suppress warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="torchvision")
@@ -56,7 +54,7 @@ def load_evaluation_models():
         print(f"Loading YOLO model: {model_path}")
         yolo_model = YOLO(str(model_path))
     else:
-        print(f"⚠ YOLO model not found at {model_path}, using default")
+        print(f"YOLO model not found at {model_path}, using default")
         yolo_model = YOLO("yolov8n-face.pt")
     
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -195,32 +193,7 @@ def calculate_insightface_similarity(
     return float(similarity.item())
 
 
-def ensure_running_in_venv() -> None:
-    """Relaunch the script with the project's virtualenv Python if needed."""
-    if os.environ.get("FACIAL_ANON_EVAL_RELAUNCHED") == "1":
-        return
 
-    in_venv = hasattr(sys, "real_prefix") or (getattr(sys, "base_prefix", sys.prefix) != sys.prefix)
-    if in_venv:
-        return
-
-    print("Attempting to relaunch with the project's venv...")
-
-    project_root = Path(__file__).resolve().parent
-    venv_dir = project_root / "venv"
-    if platform.system() == "Windows":
-        venv_python = venv_dir / "Scripts" / "python.exe"
-    else:
-        venv_python = venv_dir / "bin" / "python"
-
-    if not venv_python.exists():
-        return
-
-    env = os.environ.copy()
-    env["FACIAL_ANON_EVAL_RELAUNCHED"] = "1"
-    cmd = [str(venv_python), str(Path(__file__).resolve()), *sys.argv[1:]]
-    result = subprocess.run(cmd, cwd=project_root, env=env, check=False)
-    raise SystemExit(result.returncode)
 
 
 def parse_args() -> argparse.Namespace:
@@ -237,19 +210,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("original", type=str, help="Path to the original image")
     parser.add_argument("anonymized", type=str, help="Path to the anonymized image")
     return parser.parse_args()
-
-
-def load_image(image_path: Path, label: str) -> cv2.typing.MatLike:
-    """Load an image from file."""
-    if not image_path.exists():
-        raise FileNotFoundError(f"{label} image not found: {image_path}")
-    
-    image = cv2.imread(str(image_path))
-    if image is None:
-        raise RuntimeError(f"Failed to load {label} image: {image_path}")
-    
-    print(f"✓ Loaded {label} image: {image_path} ({image.shape[1]}x{image.shape[0]})")
-    return image
 
 
 def detect_largest_face_bbox(yolo_model: Any, image_bgr: cv2.typing.MatLike) -> Tuple[int, int, int, int]:
@@ -397,11 +357,14 @@ def main() -> None:
     original_path = Path(args.original).expanduser().resolve()
     anonymized_path = Path(args.anonymized).expanduser().resolve()
     
-    original_image = load_image(original_path, "Original")
-    anonymized_image = load_image(anonymized_path, "Anonymized")
+    original_image = load_image_cv2(original_path, "Original")
+    print(f"Loaded Original image: {original_path} ({original_image.shape[1]}x{original_image.shape[0]})")
+    
+    anonymized_image = load_image_cv2(anonymized_path, "Anonymized")
+    print(f"Loaded Anonymized image: {anonymized_path} ({anonymized_image.shape[1]}x{anonymized_image.shape[0]})")
     
     # Evaluate
-    print("\n▶ Evaluating images...")
+    print("\nEvaluating images...")
     insightface_score, clip_score, lpips_score = evaluate(original_image, anonymized_image, models)
     
     # Print results

@@ -242,3 +242,84 @@ def import_custom_nodes() -> None:
         finally:
             if str(impact_subpack_path) in sys.path:
                 sys.path.remove(str(impact_subpack_path))
+
+
+# ============================================================================
+# FILE AND ARGUMENT UTILITIES
+# ============================================================================
+
+def get_input_images(input_dir_override=None, max_images=None):
+    """Collect valid image files from input folder."""
+    images = []
+    
+    if input_dir_override:
+        input_folder = Path(input_dir_override)
+        if not input_folder.is_absolute():
+            input_folder = Path(__file__).parent / input_dir_override
+    else:
+        input_folder = Path(__file__).parent / "input"
+    
+    valid_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff'}
+    
+    if not input_folder.exists():
+        print(f"Input folder does not exist: {input_folder}")
+        return images
+    
+    for image_file in input_folder.iterdir():
+        if image_file.is_file() and image_file.suffix.lower() in valid_extensions:
+            images.append(str(image_file))
+    
+    images = sorted(images)
+    
+    if max_images and max_images > 0:
+        images = images[:max_images]
+    
+    return images
+
+
+def build_argument_parser(description: str, epilog: str = "") -> "argparse.ArgumentParser":
+    """Build a standard argument parser for facial anonymization scripts."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(
+        description=description,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=epilog
+    )
+    
+    parser.add_argument(
+        "--input",
+        type=str,
+        default="input",
+        help="Input directory path (absolute or relative). Default: input"
+    )
+    
+    parser.add_argument(
+        "--output",
+        type=str,
+        default="output",
+        help="Output directory path (absolute or relative). Default: output"
+    )
+    
+    parser.add_argument(
+        "--max-images",
+        type=int,
+        default=None,
+        help="Maximum number of images to process. Default: all images"
+    )
+    
+    parser.add_argument(
+        "--strength",
+        type=float,
+        default=0.7,
+        help="ControlNet strength (0.0-1.0). Higher values = stronger edge guidance. Default: 0.7"
+    )
+    
+    parser.add_argument(
+        "--denoise",
+        type=float,
+        default=0.6,
+        help="Denoising strength (0.0-1.0). Higher values = more changes. Default: 0.6"
+    )
+    
+    return parser

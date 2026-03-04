@@ -14,17 +14,12 @@ from typing import Any
 
 import torch
 
-# Configure UTF-8 encoding for Windows console
-if sys.platform == 'win32':
-    sys.stdout.reconfigure(encoding='utf-8')
-    sys.stderr.reconfigure(encoding='utf-8')
-
 # Suppress warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore")
 
-# Import shared utilities
+# Import shared utilities (UTF-8 config already applied)
 from shared_utils import (
     ensure_running_in_venv,
     suppress_verbose_logging,
@@ -32,6 +27,8 @@ from shared_utils import (
     configure_local_paths,
     import_custom_nodes,
     load_image_cv2,
+    get_input_images,
+    build_argument_parser,
 )
 
 # Import generation utilities
@@ -50,45 +47,15 @@ from evaluation import (
     crop_by_bbox,
 )
 
-
 # ============================================================================
-# UTILITIES
+# MAIN
 # ============================================================================
 
-def get_input_images(input_dir_override=None, max_images=None):
-    """Collect valid image files from input folder."""
-    images = []
-    
-    if input_dir_override:
-        input_folder = Path(input_dir_override)
-        if not input_folder.is_absolute():
-            input_folder = Path(__file__).parent / input_dir_override
-    else:
-        input_folder = Path(__file__).parent / "input"
-    
-    valid_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff'}
-    
-    if not input_folder.exists():
-        print(f"Input folder does not exist: {input_folder}")
-        return images
-    
-    for image_file in input_folder.iterdir():
-        if image_file.is_file() and image_file.suffix.lower() in valid_extensions:
-            images.append(str(image_file))
-    
-    images = sorted(images)
-    
-    if max_images and max_images > 0:
-        images = images[:max_images]
-    
-    return images
-
-
-def parse_arguments():
-    """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(
+def main():
+    """Main execution function."""
+    # Parse arguments first (so --help works without loading anything)
+    parser = build_argument_parser(
         description="Facial Anonymization with Evaluation - Batch processing with quality metrics",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   python main.py
@@ -97,53 +64,7 @@ Examples:
   python main.py --input ./photos --output ./results --max-images 10
         """
     )
-    
-    parser.add_argument(
-        "--input",
-        type=str,
-        default="input",
-        help="Input directory path (absolute or relative). Default: input"
-    )
-    
-    parser.add_argument(
-        "--output",
-        type=str,
-        default="output",
-        help="Output directory path (absolute or relative). Default: output"
-    )
-    
-    parser.add_argument(
-        "--max-images",
-        type=int,
-        default=None,
-        help="Maximum number of images to process. Default: all images"
-    )
-    
-    parser.add_argument(
-        "--strength",
-        type=float,
-        default=0.7,
-        help="ControlNet strength (0.0-1.0). Higher values = stronger edge guidance. Default: 0.7"
-    )
-    
-    parser.add_argument(
-        "--denoise",
-        type=float,
-        default=0.6,
-        help="Denoising strength (0.0-1.0). Higher values = more changes. Default: 0.6"
-    )
-    
-    return parser.parse_args()
-
-
-# ============================================================================
-# MAIN
-# ============================================================================
-
-def main():
-    """Main execution function."""
-    # Parse arguments first (so --help works without loading anything)
-    args = parse_arguments()
+    args = parser.parse_args()
     
     # Check venv
     ensure_running_in_venv()

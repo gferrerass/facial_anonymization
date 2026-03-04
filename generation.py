@@ -16,22 +16,19 @@ from typing import Any, Dict
 
 import torch
 
-# Configure UTF-8 encoding for Windows console
-if sys.platform == 'win32':
-    sys.stdout.reconfigure(encoding='utf-8')
-    sys.stderr.reconfigure(encoding='utf-8')
-
 # Suppress warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-# Import shared utilities
+# Import shared utilities (UTF-8 config already applied)
 from shared_utils import (
     ensure_running_in_venv,
     configure_local_paths,
     import_custom_nodes,
     get_value_at_index,
+    get_input_images,
+    build_argument_parser,
 )
 
 
@@ -39,7 +36,7 @@ def load_comfyui_models() -> Dict[str, Any]:
     """Load all ComfyUI models for generation."""
     from nodes import NODE_CLASS_MAPPINGS
     
-    print("\n▶ Loading ComfyUI generation models...")
+    print("\nLoading ComfyUI generation models...")
     
     if "UltralyticsDetectorProvider" not in NODE_CLASS_MAPPINGS:
         print("\nERROR: UltralyticsDetectorProvider not found in NODE_CLASS_MAPPINGS")
@@ -86,7 +83,7 @@ def load_comfyui_models() -> Dict[str, Any]:
     )
     
     models_load_time = time.time() - models_load_start
-    print(f"✓ ComfyUI models loaded in {models_load_time:.2f} seconds")
+    print(f"ComfyUI models loaded in {models_load_time:.2f} seconds")
     
     return {
         "face_detector": face_detector,
@@ -130,7 +127,7 @@ def process_and_generate_image(
         bbox_detector=get_value_at_index(comfyui_models["face_detector"], 0),
         image=get_value_at_index(loaded_image, 0),
     )
-    print("✓ Face detection completed")
+    print("Face detection completed")
     
     # Create blurred mask
     growmaskwithblur = NODE_CLASS_MAPPINGS["GrowMaskWithBlur"]()
@@ -145,7 +142,7 @@ def process_and_generate_image(
         fill_holes=False,
         mask=get_value_at_index(face_detection, 0),
     )
-    print("✓ Blurred mask created")
+    print("Blurred mask created")
     
     # Prepare inpainting crop
     inpaintcropimproved = NODE_CLASS_MAPPINGS["InpaintCropImproved"]()
@@ -204,7 +201,7 @@ def process_and_generate_image(
         sys.stdout, sys.stderr = old_stdout, old_stderr
     
     caption = get_value_at_index(caption_result, 2)
-    print(f"✓ Generated caption: {caption}")
+    print(f"Generated caption: {caption}")
     
     # Encode text conditioning
     cliptextencode = NODE_CLASS_MAPPINGS["CLIPTextEncode"]()
@@ -227,7 +224,7 @@ def process_and_generate_image(
         pixels=get_value_at_index(inpaint_crop, 1),
         mask=get_value_at_index(inpaint_crop, 2),
     )
-    print("✓ Inpainting conditioning prepared")
+    print("Inpainting conditioning prepared")
     
     # Apply Canny edge detection
     aio_preprocessor = NODE_CLASS_MAPPINGS["AIO_Preprocessor"]()
@@ -236,7 +233,7 @@ def process_and_generate_image(
         resolution=512,
         image=get_value_at_index(inpaint_crop, 1),
     )
-    print("✓ Canny edge detection applied")
+    print("Canny edge detection applied")
     
     # Apply model patches
     modelsamplingauraflow = NODE_CLASS_MAPPINGS["ModelSamplingAuraFlow"]()
@@ -250,7 +247,7 @@ def process_and_generate_image(
         strength=1,
         model=get_value_at_index(model_patched, 0)
     )
-    print("✓ Model patches applied")
+    print("Model patches applied")
     
     # Apply ControlNet
     qwenimagediffsynthcontrolnet = NODE_CLASS_MAPPINGS["QwenImageDiffsynthControlnet"]()
@@ -261,7 +258,7 @@ def process_and_generate_image(
         vae=get_value_at_index(comfyui_models["vae"], 0),
         image=get_value_at_index(canny_edges, 0),
     )
-    print(f"✓ ControlNet applied")
+    print(f"ControlNet applied")
     
     # Sample
     ksampler = NODE_CLASS_MAPPINGS["KSampler"]()
@@ -277,7 +274,7 @@ def process_and_generate_image(
         negative=get_value_at_index(inpaint_conditioning, 1),
         latent_image=get_value_at_index(inpaint_conditioning, 2),
     )
-    print(f"✓ Inpainting completed")
+    print(f"Inpainting completed")
     
     # Decode
     vaedecode = NODE_CLASS_MAPPINGS["VAEDecode"]()
@@ -292,7 +289,7 @@ def process_and_generate_image(
         stitcher=get_value_at_index(inpaint_crop, 0),
         inpainted_image=get_value_at_index(decoded, 0),
     )
-    print("✓ Image stitched")
+    print("Image stitched")
     
     # Get output directory
     import folder_paths
@@ -312,11 +309,11 @@ def process_and_generate_image(
     )
     
     gen_time = time.time() - gen_start_time
-    print(f"✓ Image {idx} generated in {gen_time:.2f} seconds")
+    print(f"Image {idx} generated in {gen_time:.2f} seconds")
     
     # Verify the saved file exists
     if final_path.exists():
-        print(f"✓ Image saved successfully: {final_filename}")
+        print(f"Image saved successfully: {final_filename}")
         return final_path
     else:
         # Fallback: find the most recent file that matches the pattern
@@ -336,9 +333,9 @@ def process_and_generate_image(
         if generated_file != final_path:
             try:
                 os.rename(str(generated_file), str(final_path))
-                print(f"✓ Image renamed to: {final_filename}")
+                print(f"Image renamed to: {final_filename}")
             except Exception as e:
-                print(f"⚠ Warning: Could not rename file: {e}, using {generated_file.name}")
+                print(f"Warning: Could not rename file: {e}, using {generated_file.name}")
                 return generated_file
         
         return final_path
@@ -347,41 +344,15 @@ def process_and_generate_image(
 # ============================================================================
 # UTILITIES
 # ============================================================================
+# ============================================================================
+# MAIN
+# ============================================================================
 
-def get_input_images(input_dir_override=None, max_images=None):
-    """Collect valid image files from input folder."""
-    images = []
-    
-    if input_dir_override:
-        input_folder = Path(input_dir_override)
-        if not input_folder.is_absolute():
-            input_folder = Path(__file__).parent / input_dir_override
-    else:
-        input_folder = Path(__file__).parent / "input"
-    
-    valid_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff'}
-    
-    if not input_folder.exists():
-        print(f"⚠ Input folder does not exist: {input_folder}")
-        return images
-    
-    for image_file in input_folder.iterdir():
-        if image_file.is_file() and image_file.suffix.lower() in valid_extensions:
-            images.append(str(image_file))
-    
-    images = sorted(images)
-    
-    if max_images and max_images > 0:
-        images = images[:max_images]
-    
-    return images
-
-
-def parse_arguments():
-    """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(
+def main():
+    """Main execution function."""
+    # Parse arguments first (so --help works without loading anything)
+    parser = build_argument_parser(
         description="Facial Anonymization Generation - Generate anonymized face images using AI",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   python generation.py
@@ -390,53 +361,7 @@ Examples:
   python generation.py --input ./photos --output ./results --max-images 10
         """
     )
-    
-    parser.add_argument(
-        "--input",
-        type=str,
-        default="input",
-        help="Input directory path (absolute or relative). Default: input"
-    )
-    
-    parser.add_argument(
-        "--output",
-        type=str,
-        default="output",
-        help="Output directory path (absolute or relative). Default: output"
-    )
-    
-    parser.add_argument(
-        "--max-images",
-        type=int,
-        default=None,
-        help="Maximum number of images to process. Default: all images"
-    )
-    
-    parser.add_argument(
-        "--strength",
-        type=float,
-        default=0.7,
-        help="ControlNet strength (0.0-1.0). Higher values = stronger edge guidance. Default: 0.7"
-    )
-    
-    parser.add_argument(
-        "--denoise",
-        type=float,
-        default=0.6,
-        help="Denoising strength (0.0-1.0). Higher values = more changes. Default: 0.6"
-    )
-    
-    return parser.parse_args()
-
-
-# ============================================================================
-# MAIN
-# ============================================================================
-
-def main():
-    """Main execution function."""
-    # Parse arguments first (so --help works without loading anything)
-    args = parse_arguments()
+    args = parser.parse_args()
     
     # Check venv
     ensure_running_in_venv()
@@ -462,7 +387,7 @@ def main():
         print(f"No images found in input folder: {args.input}")
         return
     
-    print(f"\n✓ Found {len(images)} image(s) to process\n")
+    print(f"\nFound {len(images)} image(s) to process\n")
     
     total_start_time = time.time()
     results = []
@@ -510,12 +435,12 @@ def main():
     print("\n" + "="*60)
     print("   BATCH GENERATION COMPLETED")
     print("="*60)
-    print(f"✓ Total images: {len(images)}")
-    print(f"✓ Successful: {sum(1 for r in results if r.get('success', False))}")
-    print(f"✓ Total time: {total_time:.2f}s ({total_time/60:.2f}m)")
-    print(f"✓ Models load time: {comfyui_load_time:.2f}s")
-    print(f"✓ Processing time: {processing_time:.2f}s")
-    print(f"✓ Average time per image: {avg_time:.2f}s")
+    print(f"Total images: {len(images)}")
+    print(f"Successful: {sum(1 for r in results if r.get('success', False))}")
+    print(f"Total time: {total_time:.2f}s ({total_time/60:.2f}m)")
+    print(f"Models load time: {comfyui_load_time:.2f}s")
+    print(f"Processing time: {processing_time:.2f}s")
+    print(f"Average time per image: {avg_time:.2f}s")
     print("="*60 + "\n")
 
 
