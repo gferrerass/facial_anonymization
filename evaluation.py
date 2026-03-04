@@ -4,6 +4,7 @@ Contains model loading and similarity metric functions.
 """
 
 import argparse
+import contextlib
 import os
 import platform
 import subprocess
@@ -27,6 +28,21 @@ from shared_utils import ensure_running_in_venv, load_image_cv2
 warnings.filterwarnings("ignore", category=UserWarning, module="torchvision")
 
 
+@contextlib.contextmanager
+def suppress_stdout_stderr():
+    """Context manager to suppress stdout and stderr."""
+    with open(os.devnull, 'w') as devnull:
+        old_stdout = sys.stdout
+        old_stderr = sys.stderr
+        try:
+            sys.stdout = devnull
+            sys.stderr = devnull
+            yield
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+
+
 def load_evaluation_models():
     """Load all models for evaluation."""
     import lpips
@@ -42,7 +58,7 @@ def load_evaluation_models():
     except ImportError:
         FaceAnalysis = None
     
-    print("▶ Loading evaluation models...")
+    print("Loading evaluation models...")
     
     if YOLO is None:
         raise RuntimeError("Ultralytics is not available")
@@ -66,7 +82,8 @@ def load_evaluation_models():
     )
     
     print(f"Loading LPIPS model (device: {device})...")
-    lpips_model = lpips.LPIPS(net='alex').to(device)
+    with suppress_stdout_stderr():
+        lpips_model = lpips.LPIPS(net='alex').to(device)
 
     insightface_model = None
     if FaceAnalysis is not None:
@@ -80,22 +97,23 @@ def load_evaluation_models():
         for provider_name in provider_candidates:
             try:
                 print(f"Loading InsightFace model (provider: {provider_name})...")
-                insightface_model = FaceAnalysis(
-                    name="buffalo_l",
-                    root=str(insightface_root),
-                    providers=[provider_name],
-                )
-                ctx_id = 0 if provider_name == "CUDAExecutionProvider" else -1
-                insightface_model.prepare(ctx_id=ctx_id, det_size=(640, 640))
+                with suppress_stdout_stderr():
+                    insightface_model = FaceAnalysis(
+                        name="buffalo_l",
+                        root=str(insightface_root),
+                        providers=[provider_name],
+                    )
+                    ctx_id = 0 if provider_name == "CUDAExecutionProvider" else -1
+                    insightface_model.prepare(ctx_id=ctx_id, det_size=(640, 640))
                 break
             except Exception as e:
                 print(f"⚠ Could not load InsightFace with {provider_name}: {e}")
                 insightface_model = None
     else:
-        print("⚠ InsightFace not available; skipping InsightFace similarity metric")
+        print("InsightFace not available; skipping InsightFace similarity metric")
     
     eval_load_time = time.time() - eval_start
-    print(f"✓ Evaluation models loaded in {eval_load_time:.2f} seconds")
+    print(f"Evaluation models loaded in {eval_load_time:.2f} seconds")
     
     return {
         "yolo": yolo_model,
@@ -347,7 +365,7 @@ def print_metrics(insightface_score: float, clip_score: float, lpips_score: floa
         print(f"InsightFace Dist.: N/A")
     print(f"CLIP Similarity:  {clip_score:.4f}")
     print(f"LPIPS Distance:   {lpips_score:.4f}")
-    print(f"{'='*60}\n")
+    print(f"{'='*60}")
 
 
 def main() -> None:

@@ -3,6 +3,7 @@ Shared utilities for facial anonymization scripts.
 Contains common functions used by main.py, generate.py, and evaluate.py.
 """
 
+import argparse
 import io
 import logging
 import os
@@ -37,8 +38,7 @@ def ensure_running_in_venv() -> None:
     if in_venv:
         return
 
-    print("Attempting to relaunch with the project's venv...")
-
+    # Attempting to relaunch with the project's venv
     project_root = Path(__file__).resolve().parent
     venv_dir = project_root / "venv"
     if platform.system() == "Windows":
@@ -108,7 +108,7 @@ def find_path(name: str, path: str = None) -> str:
     
     if name in os.listdir(path):
         path_name = os.path.join(path, name)
-        print(f"{name} found: {path_name}")
+        # print(f"{name} found: {path_name}")  # Silenced
         return path_name
     
     parent_directory = os.path.dirname(path)
@@ -126,7 +126,7 @@ def add_comfyui_directory_to_sys_path() -> None:
     comfyui_path = find_path("ComfyUI")
     if comfyui_path is not None and os.path.isdir(comfyui_path):
         sys.path.append(comfyui_path)
-        print(f"'{comfyui_path}' added to sys.path")
+        # print(f"'{comfyui_path}' added to sys.path")
 
 
 def add_extra_model_paths() -> None:
@@ -181,8 +181,6 @@ def configure_local_paths(output_dir_override=None) -> None:
     folder_paths.add_model_folder_path("ultralytics_segm", str(ultralytics_segm_dir))
     
     folder_paths.set_output_directory(str(output_dir))
-    
-    print(f"✓ Models directory: {models_dir}")
 
 
 # Track if ComfyUI paths have been initialized
@@ -320,6 +318,34 @@ def build_argument_parser(description: str, epilog: str = "") -> "argparse.Argum
         type=float,
         default=0.6,
         help="Denoising strength (0.0-1.0). Higher values = more changes. Default: 0.6"
+    )
+    
+    parser.add_argument(
+        "--insightface-threshold",
+        type=float,
+        default=0.65,
+        help="InsightFace similarity threshold (0.0-1.0). Higher values = more anonymization required. Default: 0.65"
+    )
+    
+    parser.add_argument(
+        "--clip-threshold",
+        type=float,
+        default=0.75,
+        help="CLIP similarity threshold (0.0-1.0). Higher values = must preserve more context. Default: 0.75"
+    )
+    
+    parser.add_argument(
+        "--lpips-threshold",
+        type=float,
+        default=0.3,
+        help="LPIPS perceptual similarity threshold (0.0-1.0). Lower values = more similarity required. Default: 0.3"
+    )
+    
+    parser.add_argument(
+        "--max-iterations",
+        type=int,
+        default=3,
+        help="Maximum number of generation iterations per image (1-10). Default: 3"
     )
     
     return parser

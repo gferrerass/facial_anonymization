@@ -107,9 +107,9 @@ def process_and_generate_image(
     """Generate anonymized image using ComfyUI workflow."""
     from nodes import NODE_CLASS_MAPPINGS
     
-    print(f"\n{'='*60}")
+    print("="*60)
     print(f"   GENERATING IMAGE {idx}/{total}")
-    print(f"{'='*60}")
+    print("="*60)
     print(f"Input image: {image_path}")
     
     original_filename = Path(image_path).stem
@@ -174,7 +174,7 @@ def process_and_generate_image(
         image=get_value_at_index(loaded_image, 0),
         mask=get_value_at_index(blurred_mask, 0),
     )
-    print("✓ Inpainting crop prepared")
+    print("Inpainting crop prepared")
     
     # Generate caption
     florence2run = NODE_CLASS_MAPPINGS["Florence2Run"]()
@@ -201,7 +201,8 @@ def process_and_generate_image(
         sys.stdout, sys.stderr = old_stdout, old_stderr
     
     caption = get_value_at_index(caption_result, 2)
-    print(f"Generated caption: {caption}")
+    print("Generated caption:")
+    print(caption)
     
     # Encode text conditioning
     cliptextencode = NODE_CLASS_MAPPINGS["CLIPTextEncode"]()

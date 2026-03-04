@@ -50,12 +50,13 @@ def main():
     """Main execution function."""
     # Parse arguments first (so --help works without loading anything)
     parser = build_argument_parser(
-        description="Facial Anonymization with Evaluation - Batch processing with quality metrics",
+        description="Facial Anonymization with Evaluation - Iterative optimization with quality metrics",
         epilog="""
 Examples:
   python main.py
   python main.py --input custom_input --output custom_output
   python main.py --strength 0.8 --denoise 0.7 --max-images 5
+  python main.py --insightface-threshold 0.7 --clip-threshold 0.8 --max-iterations 5
   python main.py --input ./photos --output ./results --max-images 10
         """
     )
@@ -71,8 +72,12 @@ Examples:
     print(f"Output directory: {args.output}")
     if args.max_images:
         print(f"Max images: {args.max_images}")
-    print(f"ControlNet strength: {args.strength}")
-    print(f"Denoise strength: {args.denoise}")
+    print(f"Initial ControlNet strength: {args.strength}")
+    print(f"Initial Denoise strength: {args.denoise}")
+    print(f"Max iterations per image: {args.max_iterations}")
+    print(f"InsightFace threshold: {args.insightface_threshold}")
+    print(f"CLIP threshold: {args.clip_threshold}")
+    print(f"LPIPS threshold: {args.lpips_threshold}")
     print("="*60)
     
     # Setup
@@ -85,14 +90,11 @@ Examples:
         print(f"No images found in input folder: {args.input}")
         return
     
-    print(f"\nFound {len(images)} image(s) to process\n")
-    
     total_start_time = time.time()
     results = []
     
     with torch.inference_mode():
         # Load all models once at the beginning
-        print("\n" + "="*60)
         print("   LOADING ALL MODELS")
         print("="*60)
         
@@ -101,38 +103,84 @@ Examples:
         
         print("="*60)
         
-        # Process each image
+        # Process each image with iterative optimization
         for idx, image_path in enumerate(images, start=1):
+            print(f"   PROCESSING IMAGE {idx}/{len(images)}")
+            
             try:
-                # Generate anonymized image
-                anonymized_path = process_and_generate_image(
-                    idx, len(images), image_path, comfyui_models,
-                    controlnet_strength=args.strength,
-                    denoise_strength=args.denoise
-                )
+                # Initialize parameters for this image
+                current_strength = args.strength
+                current_denoise = args.denoise
+                iteration = 0
                 
-                # Load images
+                # Load original image once
                 original_image = load_image_cv2(Path(image_path), "original")
-                anonymized_image = load_image_cv2(anonymized_path, "anonymized")
                 
-                # Evaluate
-                print(f"\nEvaluating image {idx}/{len(images)}...")
-                insightface_score, clip_score, lpips_score = evaluate(
-                    original_image, anonymized_image, eval_models
-                )
-                
-                # Print metrics
-                print_metrics(insightface_score, clip_score, lpips_score)
-                
-                results.append({
-                    "image": Path(image_path).name,
-                    "generated": anonymized_path.name,
-                    "insightface_score": insightface_score,
-                    "clip_score": clip_score,
-                    "lpips_score": lpips_score,
-                    "success": True,
-                })
+                # Iterative optimization loop
+                while iteration < args.max_iterations:
+                    iteration += 1
+                    print("="*60)
+                    print(f"   ITERATION {iteration}/{args.max_iterations}")
+                    print(f"   Strength: {current_strength:.3f}")
+                    print(f"   Denoise: {current_denoise:.3f}")
                     
+                    # Generate anonymized image
+                    anonymized_path = process_and_generate_image(
+                        idx, len(images), image_path, comfyui_models,
+                        controlnet_strength=current_strength,
+                        denoise_strength=current_denoise
+                    )
+                    
+                    # Load anonymized image
+                    anonymized_image = load_image_cv2(anonymized_path, "anonymized")
+                    
+                    # Evaluate
+                    insightface_score, clip_score, lpips_score = evaluate(
+                        original_image, anonymized_image, eval_models
+                    )
+                    
+                    # Print metrics
+                    print_metrics(insightface_score, clip_score, lpips_score)
+                    
+                    # Store result
+                    current_result = {
+                        "image": Path(image_path).name,
+                        "generated": anonymized_path.name,
+                        "iteration": iteration,
+                        "strength": current_strength,
+                        "denoise": current_denoise,
+                        "insightface_score": insightface_score,
+                        "clip_score": clip_score,
+                        "lpips_score": lpips_score,
+                        "success": True,
+                    }
+                    
+                    # Check if metrics are satisfactory
+                    if insightface_score < args.insightface_threshold:
+                        print(f"  InsightFace score ({insightface_score:.3f}) is lower than threshold ({args.insightface_threshold})")
+                        print(f"  Adjusting: strength*0.9, denoise*1.1")
+                        current_strength *= 0.9
+                        current_denoise *= 1.1
+                        current_denoise = min(current_denoise, 1.0)  # Cap at 1.0
+                    elif clip_score < args.clip_threshold:
+                        print(f"  CLIP score ({clip_score:.3f}) < threshold ({args.clip_threshold})")
+                        print(f"  Adjusting: strength*1.075, denoise*0.95")
+                        current_strength *= 1.075
+                        current_denoise *= 0.95
+                        current_strength = min(current_strength, 1.0)  # Cap at 1.0
+                    elif lpips_score < args.lpips_threshold:
+                        print(f"  LPIPS score ({lpips_score:.3f}) < threshold ({args.lpips_threshold})")
+                        print(f"  Adjusting: strength*1.075, denoise*0.95")
+                        current_strength *= 1.075
+                        current_denoise *= 0.95
+                        current_strength = min(current_strength, 1.0)  # Cap at 1.0
+                    else:
+                        print(f"  All metrics within acceptable range!")
+                        break
+                    
+                if iteration == args.max_iterations:
+                    print(f"  Reached maximum iterations without meeting all thresholds.")
+                       
             except Exception as e:
                 print(f"\nError processing image {idx}: {e}")
                 results.append({
