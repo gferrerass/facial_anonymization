@@ -93,6 +93,11 @@ Examples:
     total_start_time = time.time()
     results = []
     
+    # Track metrics for statistics
+    generation_times = []  # Time for each generation call
+    image_total_times = []  # Total time per image (all iterations)
+    iterations_per_image = []  # Number of iterations per image
+    
     with torch.inference_mode():
         # Load all models once at the beginning
         print("   LOADING ALL MODELS")
@@ -106,6 +111,7 @@ Examples:
         # Process each image with iterative optimization
         for idx, image_path in enumerate(images, start=1):
             print(f"   PROCESSING IMAGE {idx}/{len(images)}")
+            image_start_time = time.time()
             
             try:
                 # Initialize parameters for this image
@@ -124,12 +130,15 @@ Examples:
                     print(f"   Strength: {current_strength:.3f}")
                     print(f"   Denoise: {current_denoise:.3f}")
                     
-                    # Generate anonymized image
+                    # Generate anonymized image and track time
+                    generation_start_time = time.time()
                     anonymized_path = process_and_generate_image(
                         idx, len(images), image_path, comfyui_models,
                         controlnet_strength=current_strength,
                         denoise_strength=current_denoise
                     )
+                    generation_time = time.time() - generation_start_time
+                    generation_times.append(generation_time)
                     
                     # Load anonymized image
                     anonymized_image = load_image_cv2(anonymized_path, "anonymized")
@@ -163,13 +172,13 @@ Examples:
                         current_denoise *= 1.1
                         current_denoise = min(current_denoise, 1.0)  # Cap at 1.0
                     elif clip_score < args.clip_threshold:
-                        print(f"  CLIP score ({clip_score:.3f}) < threshold ({args.clip_threshold})")
+                        print(f"  CLIP score ({clip_score:.3f}) is lower than threshold ({args.clip_threshold})")
                         print(f"  Adjusting: strength*1.075, denoise*0.95")
                         current_strength *= 1.075
                         current_denoise *= 0.95
                         current_strength = min(current_strength, 1.0)  # Cap at 1.0
-                    elif lpips_score < args.lpips_threshold:
-                        print(f"  LPIPS score ({lpips_score:.3f}) < threshold ({args.lpips_threshold})")
+                    elif lpips_score > args.lpips_threshold:
+                        print(f"  LPIPS score ({lpips_score:.3f}) is higher than threshold ({args.lpips_threshold})")
                         print(f"  Adjusting: strength*1.075, denoise*0.95")
                         current_strength *= 1.075
                         current_denoise *= 0.95
@@ -180,6 +189,11 @@ Examples:
                     
                 if iteration == args.max_iterations:
                     print(f"  Reached maximum iterations without meeting all thresholds.")
+                
+                # Track iterations and total time for this image
+                iterations_per_image.append(iteration)
+                image_total_time = time.time() - image_start_time
+                image_total_times.append(image_total_time)
                        
             except Exception as e:
                 print(f"\nError processing image {idx}: {e}")
@@ -188,6 +202,11 @@ Examples:
                     "success": False,
                     "error": str(e)
                 })
+    
+    # Calculate statistics
+    avg_generation_time = sum(generation_times) / len(generation_times) if generation_times else 0
+    avg_image_total_time = sum(image_total_times) / len(image_total_times) if image_total_times else 0
+    avg_iterations = sum(iterations_per_image) / len(iterations_per_image) if iterations_per_image else 0
     
     # Summary
     total_time = time.time() - total_start_time
@@ -201,13 +220,14 @@ Examples:
     print("   BATCH PROCESSING COMPLETED")
     print("="*60)
     print(f"Total images: {len(images)}")
-    print(f"Successful: {sum(1 for r in results if r.get('success', False))}")
     print(f"Total time: {total_time:.2f}s ({total_time/60:.2f}m)")
     print(f"Models load time: {total_load_time:.2f}s")
     print(f"  - ComfyUI models: {comfyui_load_time:.2f}s")
     print(f"  - Evaluation models: {eval_load_time:.2f}s")
     print(f"Processing time: {processing_time:.2f}s")
-    print(f"Average time per image: {avg_time:.2f}s")
+    print(f"Average time per generation: {avg_generation_time:.2f}s")
+    print(f"Average time per final image: {avg_image_total_time:.2f}s")
+    print(f"Average iterations per image: {avg_iterations:.2f}")
     print("="*60 + "\n")
 
 
