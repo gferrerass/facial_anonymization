@@ -70,10 +70,14 @@ input/*.jpeg
 input/*.gif
 input/*.bmp
 input/*.webp
+input/*.tif
+input/*.tiff
 output/*.png
 output/*.jpg
 output/*.jpeg
 output/*.gif
 output/*.bmp
 output/*.webp
+output/*.tif
+output/*.tiff
 
