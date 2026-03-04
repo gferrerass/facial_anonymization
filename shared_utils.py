@@ -13,6 +13,15 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence, Union
 
 
+# Configure UTF-8 encoding for Windows console
+if sys.platform == 'win32':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass  # Ignore if reconfigure is not available
+
+
 # ============================================================================
 # VENV MANAGEMENT
 # ============================================================================
@@ -41,7 +50,8 @@ def ensure_running_in_venv() -> None:
 
     env = os.environ.copy()
     env["FACIAL_ANON_RELAUNCHED"] = "1"
-    cmd = [str(venv_python), str(Path(__file__).resolve()), *sys.argv[1:]]
+    # Use sys.argv[0] to get the actual script being run, not this util file
+    cmd = [str(venv_python)] + sys.argv
     result = subprocess.run(cmd, cwd=project_root, env=env, check=False)
     raise SystemExit(result.returncode)
 
@@ -120,16 +130,11 @@ def add_extra_model_paths() -> None:
         load_extra_path_config(extra_model_paths)
 
 
-# Initialize ComfyUI paths
-_initialized = False
-if not _initialized:
-    add_comfyui_directory_to_sys_path()
-    add_extra_model_paths()
-    _initialized = True
-
-
 def configure_local_paths(output_dir_override=None) -> None:
     """Configure ComfyUI to use local models and output directories."""
+    # Initialize ComfyUI paths if not already done
+    initialize_comfyui_paths()
+    
     import folder_paths
     
     facial_anonymization_dir = Path(__file__).parent
@@ -166,14 +171,25 @@ def configure_local_paths(output_dir_override=None) -> None:
     print(f"✓ Models directory: {models_dir}")
 
 
+# Track if ComfyUI paths have been initialized
+_comfyui_initialized = False
+
+
 def initialize_comfyui_paths() -> None:
     """Initialize ComfyUI paths (alias for add_comfyui_directory_to_sys_path + add_extra_model_paths)."""
+    global _comfyui_initialized
+    if _comfyui_initialized:
+        return
     add_comfyui_directory_to_sys_path()
     add_extra_model_paths()
+    _comfyui_initialized = True
 
 
 def import_custom_nodes() -> None:
     """Initialize ComfyUI custom nodes."""
+    # Initialize ComfyUI paths if not already done
+    initialize_comfyui_paths()
+    
     import asyncio
     
     try:

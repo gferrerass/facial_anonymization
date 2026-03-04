@@ -3,14 +3,29 @@ Evaluation utilities for facial anonymization.
 Contains model loading and similarity metric functions.
 """
 
+import argparse
+import os
+import platform
+import subprocess
+import sys
 import time
+import warnings
 from pathlib import Path
-from typing import Any
+from typing import Any, Tuple
+
 import cv2
 import torch
 import torch.nn.functional as F
 from PIL import Image
 from torchvision import transforms
+
+# Configure UTF-8 encoding for Windows console
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+
+# Suppress warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="torchvision")
 
 
 def load_evaluation_models():
@@ -178,3 +193,221 @@ def calculate_insightface_similarity(
     emb2 = torch.from_numpy(emb2).float().unsqueeze(0)
     similarity = F.cosine_similarity(emb1, emb2)
     return float(similarity.item())
+
+
+def ensure_running_in_venv() -> None:
+    """Relaunch the script with the project's virtualenv Python if needed."""
+    if os.environ.get("FACIAL_ANON_EVAL_RELAUNCHED") == "1":
+        return
+
+    in_venv = hasattr(sys, "real_prefix") or (getattr(sys, "base_prefix", sys.prefix) != sys.prefix)
+    if in_venv:
+        return
+
+    print("Attempting to relaunch with the project's venv...")
+
+    project_root = Path(__file__).resolve().parent
+    venv_dir = project_root / "venv"
+    if platform.system() == "Windows":
+        venv_python = venv_dir / "Scripts" / "python.exe"
+    else:
+        venv_python = venv_dir / "bin" / "python"
+
+    if not venv_python.exists():
+        return
+
+    env = os.environ.copy()
+    env["FACIAL_ANON_EVAL_RELAUNCHED"] = "1"
+    cmd = [str(venv_python), str(Path(__file__).resolve()), *sys.argv[1:]]
+    result = subprocess.run(cmd, cwd=project_root, env=env, check=False)
+    raise SystemExit(result.returncode)
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Evaluate facial anonymization quality.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  python evaluation.py input/person.jpg output/person_anonymized_0001.png\n"
+            "  python evaluation.py C:/data/orig.png C:/data/anon.png"
+        ),
+    )
+    parser.add_argument("original", type=str, help="Path to the original image")
+    parser.add_argument("anonymized", type=str, help="Path to the anonymized image")
+    return parser.parse_args()
+
+
+def load_image(image_path: Path, label: str) -> cv2.typing.MatLike:
+    """Load an image from file."""
+    if not image_path.exists():
+        raise FileNotFoundError(f"{label} image not found: {image_path}")
+    
+    image = cv2.imread(str(image_path))
+    if image is None:
+        raise RuntimeError(f"Failed to load {label} image: {image_path}")
+    
+    print(f"✓ Loaded {label} image: {image_path} ({image.shape[1]}x{image.shape[0]})")
+    return image
+
+
+def detect_largest_face_bbox(yolo_model: Any, image_bgr: cv2.typing.MatLike) -> Tuple[int, int, int, int]:
+    """Detect the largest face in the image and return its bounding box."""
+    results = yolo_model.predict(image_bgr, verbose=False)
+    
+    if not results or len(results[0].boxes) == 0:
+        raise RuntimeError("No faces detected in the image")
+    
+    # Get the largest face
+    boxes = results[0].boxes.xyxy.cpu().numpy()
+    areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+    largest_idx = areas.argmax()
+    x1, y1, x2, y2 = boxes[largest_idx]
+    
+    return int(x1), int(y1), int(x2), int(y2)
+
+
+def crop_by_bbox(image_bgr: cv2.typing.MatLike, bbox: Tuple[int, int, int, int]) -> cv2.typing.MatLike:
+    """Crop image by bounding box."""
+    x1, y1, x2, y2 = bbox
+    return image_bgr[y1:y2, x1:x2]
+
+
+def scale_bbox(
+    bbox: Tuple[int, int, int, int],
+    src_size: Tuple[int, int],
+    dst_size: Tuple[int, int],
+) -> Tuple[int, int, int, int]:
+    """Scale bounding box from source image size to destination image size."""
+    src_h, src_w = src_size
+    dst_h, dst_w = dst_size
+
+    x1, y1, x2, y2 = bbox
+    scale_x = dst_w / src_w
+    scale_y = dst_h / src_h
+
+    sx1 = int(round(x1 * scale_x))
+    sy1 = int(round(y1 * scale_y))
+    sx2 = int(round(x2 * scale_x))
+    sy2 = int(round(y2 * scale_y))
+
+    sx1 = max(0, min(dst_w - 1, sx1))
+    sy1 = max(0, min(dst_h - 1, sy1))
+    sx2 = max(sx1 + 1, min(dst_w, sx2))
+    sy2 = max(sy1 + 1, min(dst_h, sy2))
+    return sx1, sy1, sx2, sy2
+
+
+def evaluate(original_image: cv2.typing.MatLike, anonymized_image: cv2.typing.MatLike, models: dict) -> Tuple[float, float, float]:
+    """
+    Evaluate the anonymization quality by comparing original and anonymized images.
+    
+    Args:
+        original_image: Original image (BGR format)
+        anonymized_image: Anonymized image (BGR format)
+        models: Dictionary containing loaded models and device info
+    
+    Returns:
+        Tuple of (insightface_score, clip_score, lpips_score)
+    """
+    # Detect largest face in original image
+    bbox_original = detect_largest_face_bbox(models["yolo"], original_image)
+    
+    # Scale bbox to anonymized image dimensions
+    bbox_anonymized = scale_bbox(
+        bbox_original,
+        src_size=original_image.shape[:2],
+        dst_size=anonymized_image.shape[:2],
+    )
+    
+    # Crop faces
+    original_crop = crop_by_bbox(original_image, bbox_original)
+    anonymized_crop = crop_by_bbox(anonymized_image, bbox_anonymized)
+    
+    # Calculate metrics
+    clip_score = calculate_clip_similarity(
+        original_crop,
+        anonymized_crop,
+        models["clip_model"],
+        models["clip_preprocess"],
+        models["device"]
+    )
+    
+    lpips_distance = calculate_lpips_similarity(
+        original_crop,
+        anonymized_crop,
+        models["lpips"],
+        models["device"]
+    )
+    lpips_score = lpips_distance  # Return distance as score (lower is more similar)
+    
+    insightface_score = None
+    if models.get("insightface") is not None:
+        try:
+            insightface_score = calculate_insightface_similarity(
+                original_crop,
+                anonymized_crop,
+                models["insightface"]
+            )
+        except Exception as e:
+            print(f"⚠ InsightFace calculation failed: {e}")
+            insightface_score = None
+    
+    return insightface_score, clip_score, lpips_score
+
+
+def print_metrics(insightface_score: float, clip_score: float, lpips_score: float) -> None:
+    """
+    Print evaluation metrics in a formatted way.
+    
+    Args:
+        insightface_score: InsightFace similarity (0-1, higher is more similar)
+        clip_score: CLIP similarity (0-1, higher is more similar)
+        lpips_score: LPIPS distance (lower is more similar)
+    """
+    print(f"\n{'='*60}")
+    print(f"Similarity Metrics")
+    print(f"{'='*60}")
+    if insightface_score is not None:
+        print(f"InsightFace Sim.: {insightface_score:.4f}")
+    else:
+        print(f"InsightFace Sim.: N/A")
+    print(f"CLIP Similarity:  {clip_score:.4f}")
+    print(f"LPIPS Distance:   {lpips_score:.4f}")
+    print(f"{'='*60}\n")
+
+
+def main() -> None:
+    """Main execution function."""
+    # Parse arguments first (so --help works without loading anything)
+    args = parse_args()
+    
+    # Check venv after parsing args
+    ensure_running_in_venv()
+    
+    print("\n" + "="*60)
+    print("   FACIAL ANONYMIZATION EVALUATION")
+    print("="*60)
+    
+    # Load models
+    models = load_evaluation_models()
+    
+    # Load images
+    original_path = Path(args.original).expanduser().resolve()
+    anonymized_path = Path(args.anonymized).expanduser().resolve()
+    
+    original_image = load_image(original_path, "Original")
+    anonymized_image = load_image(anonymized_path, "Anonymized")
+    
+    # Evaluate
+    print("\n▶ Evaluating images...")
+    insightface_score, clip_score, lpips_score = evaluate(original_image, anonymized_image, models)
+    
+    # Print results
+    print_metrics(insightface_score, clip_score, lpips_score)
+
+
+if __name__ == "__main__":
+    main()
+
