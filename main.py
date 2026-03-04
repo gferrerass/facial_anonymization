@@ -22,8 +22,6 @@ warnings.filterwarnings("ignore")
 # Import shared utilities (UTF-8 config already applied)
 from shared_utils import (
     ensure_running_in_venv,
-    suppress_verbose_logging,
-    get_value_at_index,
     configure_local_paths,
     import_custom_nodes,
     load_image_cv2,
@@ -42,9 +40,6 @@ from evaluation import (
     load_evaluation_models,
     evaluate,
     print_metrics,
-    detect_largest_face_bbox,
-    scale_bbox,
-    crop_by_bbox,
 )
 
 # ============================================================================

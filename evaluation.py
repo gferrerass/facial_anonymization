@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Tuple
 
 import cv2
+import numpy as np
 import torch
 import torch.nn.functional as F
 from PIL import Image
@@ -180,17 +181,16 @@ def calculate_insightface_similarity(
     image2_bgr: cv2.typing.MatLike,
     insightface_model: Any,
 ) -> float:
-    """Calculate cosine similarity between two face embeddings using InsightFace."""
+    """Calculate cosine distance between two face embeddings using InsightFace (matches faceanalysis.py)."""
     emb1 = _extract_insightface_embedding(insightface_model, image1_bgr)
     emb2 = _extract_insightface_embedding(insightface_model, image2_bgr)
 
     if emb1 is None or emb2 is None:
         raise RuntimeError("InsightFace could not detect a face in one or both crops")
 
-    emb1 = torch.from_numpy(emb1).float().unsqueeze(0)
-    emb2 = torch.from_numpy(emb2).float().unsqueeze(0)
-    similarity = F.cosine_similarity(emb1, emb2)
-    return float(similarity.item())
+    # Use the same formula as faceanalysis.py line 433
+    dist = np.float64(1 - np.dot(emb1, emb2) / (np.linalg.norm(emb1) * np.linalg.norm(emb2)))
+    return float(dist)
 
 
 
@@ -204,11 +204,17 @@ def parse_args() -> argparse.Namespace:
         epilog=(
             "Examples:\n"
             "  python evaluation.py input/person.jpg output/person_anonymized_0001.png\n"
-            "  python evaluation.py C:/data/orig.png C:/data/anon.png"
+            "  python evaluation.py C:/data/orig.png C:/data/anon.png\n"
+            "  python evaluation.py input/person.jpg output/person_anonymized_0001.png --no_crop"
         ),
     )
     parser.add_argument("original", type=str, help="Path to the original image")
     parser.add_argument("anonymized", type=str, help="Path to the anonymized image")
+    parser.add_argument(
+        "--no_crop",
+        action="store_true",
+        help="Skip face detection and cropping; assumes images are already cropped to face region"
+    )
     return parser.parse_args()
 
 
@@ -259,7 +265,7 @@ def scale_bbox(
     return sx1, sy1, sx2, sy2
 
 
-def evaluate(original_image: cv2.typing.MatLike, anonymized_image: cv2.typing.MatLike, models: dict) -> Tuple[float, float, float]:
+def evaluate(original_image: cv2.typing.MatLike, anonymized_image: cv2.typing.MatLike, models: dict, no_crop: bool = False) -> Tuple[float, float, float]:
     """
     Evaluate the anonymization quality by comparing original and anonymized images.
     
@@ -267,23 +273,29 @@ def evaluate(original_image: cv2.typing.MatLike, anonymized_image: cv2.typing.Ma
         original_image: Original image (BGR format)
         anonymized_image: Anonymized image (BGR format)
         models: Dictionary containing loaded models and device info
+        no_crop: If True, skip face detection and use full images (assumes pre-cropped faces)
     
     Returns:
         Tuple of (insightface_score, clip_score, lpips_score)
     """
-    # Detect largest face in original image
-    bbox_original = detect_largest_face_bbox(models["yolo"], original_image)
-    
-    # Scale bbox to anonymized image dimensions
-    bbox_anonymized = scale_bbox(
-        bbox_original,
-        src_size=original_image.shape[:2],
-        dst_size=anonymized_image.shape[:2],
-    )
-    
-    # Crop faces
-    original_crop = crop_by_bbox(original_image, bbox_original)
-    anonymized_crop = crop_by_bbox(anonymized_image, bbox_anonymized)
+    if no_crop:
+        # Use full images (assumes they are already cropped to face region)
+        original_crop = original_image
+        anonymized_crop = anonymized_image
+    else:
+        # Detect largest face in original image
+        bbox_original = detect_largest_face_bbox(models["yolo"], original_image)
+        
+        # Scale bbox to anonymized image dimensions
+        bbox_anonymized = scale_bbox(
+            bbox_original,
+            src_size=original_image.shape[:2],
+            dst_size=anonymized_image.shape[:2],
+        )
+        
+        # Crop faces
+        original_crop = crop_by_bbox(original_image, bbox_original)
+        anonymized_crop = crop_by_bbox(anonymized_image, bbox_anonymized)
     
     # Calculate metrics
     clip_score = calculate_clip_similarity(
@@ -322,7 +334,7 @@ def print_metrics(insightface_score: float, clip_score: float, lpips_score: floa
     Print evaluation metrics in a formatted way.
     
     Args:
-        insightface_score: InsightFace similarity (0-1, higher is more similar)
+        insightface_score: InsightFace distance (0-1, lower is more similar)
         clip_score: CLIP similarity (0-1, higher is more similar)
         lpips_score: LPIPS distance (lower is more similar)
     """
@@ -330,9 +342,9 @@ def print_metrics(insightface_score: float, clip_score: float, lpips_score: floa
     print(f"Similarity Metrics")
     print(f"{'='*60}")
     if insightface_score is not None:
-        print(f"InsightFace Sim.: {insightface_score:.4f}")
+        print(f"InsightFace Dist.: {insightface_score:.4f}")
     else:
-        print(f"InsightFace Sim.: N/A")
+        print(f"InsightFace Dist.: N/A")
     print(f"CLIP Similarity:  {clip_score:.4f}")
     print(f"LPIPS Distance:   {lpips_score:.4f}")
     print(f"{'='*60}\n")
@@ -365,7 +377,9 @@ def main() -> None:
     
     # Evaluate
     print("\nEvaluating images...")
-    insightface_score, clip_score, lpips_score = evaluate(original_image, anonymized_image, models)
+    if args.no_crop:
+        print("Using pre-cropped images (skipping face detection)")
+    insightface_score, clip_score, lpips_score = evaluate(original_image, anonymized_image, models, no_crop=args.no_crop)
     
     # Print results
     print_metrics(insightface_score, clip_score, lpips_score)
