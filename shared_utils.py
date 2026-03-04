@@ -12,6 +12,8 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping, Sequence, Union
 
+import cv2
+
 
 # Configure UTF-8 encoding for Windows console
 if sys.platform == 'win32':
@@ -73,6 +75,18 @@ def suppress_verbose_logging() -> None:
 
 
 suppress_verbose_logging()
+
+
+# ============================================================================
+# IMAGE UTILITIES
+# ============================================================================
+
+def load_image_cv2(path: Path, label: str) -> cv2.typing.MatLike:
+    """Load image using OpenCV."""
+    image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+    if image is None:
+        raise FileNotFoundError(f"Could not load {label} image: {path}")
+    return image
 
 
 # ============================================================================

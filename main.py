@@ -31,14 +31,7 @@ from shared_utils import (
     get_value_at_index,
     configure_local_paths,
     import_custom_nodes,
-)
-
-# Import image utilities
-from image_utils import (
     load_image_cv2,
-    detect_largest_face_bbox,
-    scale_bbox,
-    crop_by_bbox,
 )
 
 # Import generation utilities
@@ -50,70 +43,12 @@ from generation import (
 # Import evaluation utilities
 from evaluation import (
     load_evaluation_models,
-    calculate_clip_similarity,
-    calculate_lpips_similarity,
-    calculate_insightface_similarity,
+    evaluate,
+    print_metrics,
+    detect_largest_face_bbox,
+    scale_bbox,
+    crop_by_bbox,
 )
-
-
-# ============================================================================
-# IMAGE EVALUATION
-# ============================================================================
-
-
-def evaluate_images(original_path: Path, generated_path: Path, eval_models: dict) -> dict:
-    """Evaluate anonymized image quality."""
-    try:
-        original_bgr = load_image_cv2(original_path, "original")
-        generated_bgr = load_image_cv2(generated_path, "generated")
-
-        # Detect largest face
-        bbox_original = detect_largest_face_bbox(eval_models["yolo"], original_bgr)
-        bbox_generated = scale_bbox(
-            bbox_original,
-            src_size=original_bgr.shape[:2],
-            dst_size=generated_bgr.shape[:2],
-        )
-
-        original_crop = crop_by_bbox(original_bgr, bbox_original)
-        generated_crop = crop_by_bbox(generated_bgr, bbox_generated)
-
-        # Calculate similarities
-        clip_score = calculate_clip_similarity(
-            original_crop, generated_crop, 
-            eval_models["clip_model"], eval_models["clip_preprocess"], eval_models["device"]
-        )
-        
-        lpips_distance = calculate_lpips_similarity(
-            original_crop, generated_crop, eval_models["lpips"], eval_models["device"]
-        )
-        lpips_similarity = 1.0 - lpips_distance
-
-        insightface_similarity = None
-        if eval_models.get("insightface") is not None:
-            insightface_similarity = calculate_insightface_similarity(
-                original_crop,
-                generated_crop,
-                eval_models["insightface"],
-            )
-
-        return {
-            "clip_score": clip_score,
-            "lpips_distance": lpips_distance,
-            "lpips_similarity": lpips_similarity,
-            "insightface_similarity": insightface_similarity,
-            "success": True,
-        }
-    except Exception as e:
-        print(f"✗ Evaluation error: {e}")
-        return {
-            "clip_score": None,
-            "lpips_distance": None,
-            "lpips_similarity": None,
-            "insightface_similarity": None,
-            "success": False,
-            "error": str(e),
-        }
 
 
 # ============================================================================
@@ -134,7 +69,7 @@ def get_input_images(input_dir_override=None, max_images=None):
     valid_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff'}
     
     if not input_folder.exists():
-        print(f"⚠ Input folder does not exist: {input_folder}")
+        print(f"Input folder does not exist: {input_folder}")
         return images
     
     for image_file in input_folder.iterdir():
@@ -234,7 +169,7 @@ def main():
         print(f"No images found in input folder: {args.input}")
         return
     
-    print(f"\n✓ Found {len(images)} image(s) to process\n")
+    print(f"\nFound {len(images)} image(s) to process\n")
     
     total_start_time = time.time()
     results = []
@@ -254,39 +189,36 @@ def main():
         for idx, image_path in enumerate(images, start=1):
             try:
                 # Generate anonymized image
-                generated_path = process_and_generate_image(
+                anonymized_path = process_and_generate_image(
                     idx, len(images), image_path, comfyui_models,
                     controlnet_strength=args.strength,
                     denoise_strength=args.denoise
                 )
                 
-                # Evaluate the generated image
-                print(f"\n▶ Evaluating image {idx}/{len(images)}...")
-                eval_result = evaluate_images(Path(image_path), generated_path, eval_models)
+                # Load images
+                original_image = load_image_cv2(Path(image_path), "original")
+                anonymized_image = load_image_cv2(anonymized_path, "anonymized")
                 
-                if eval_result["success"]:
-                    print(f"\n{'='*60}")
-                    print(f"   EVALUATION RESULTS - IMAGE {idx}")
-                    print(f"{'='*60}")
-                    print(f"CLIP Similarity:  {eval_result['clip_score']:.4f}")
-                    print(f"LPIPS Distance:   {eval_result['lpips_distance']:.4f}")
-                    print(f"LPIPS Similarity: {eval_result['lpips_similarity']:.4f}")
-                    if eval_result['insightface_similarity'] is not None:
-                        print(f"InsightFace Sim.: {eval_result['insightface_similarity']:.4f}")
-                    else:
-                        print("InsightFace Sim.: N/A")
-                    print(f"{'='*60}")
-                    
-                    results.append({
-                        "image": Path(image_path).name,
-                        "generated": generated_path.name,
-                        **eval_result
-                    })
-                else:
-                    print(f"✗ Evaluation failed: {eval_result.get('error', 'Unknown error')}")
+                # Evaluate
+                print(f"\nEvaluating image {idx}/{len(images)}...")
+                insightface_score, clip_score, lpips_score = evaluate(
+                    original_image, anonymized_image, eval_models
+                )
+                
+                # Print metrics
+                print_metrics(insightface_score, clip_score, lpips_score)
+                
+                results.append({
+                    "image": Path(image_path).name,
+                    "generated": anonymized_path.name,
+                    "insightface_score": insightface_score,
+                    "clip_score": clip_score,
+                    "lpips_score": lpips_score,
+                    "success": True,
+                })
                     
             except Exception as e:
-                print(f"\n✗ Error processing image {idx}: {e}")
+                print(f"\nError processing image {idx}: {e}")
                 results.append({
                     "image": Path(image_path).name,
                     "success": False,
@@ -304,14 +236,14 @@ def main():
     print("\n" + "="*60)
     print("   BATCH PROCESSING COMPLETED")
     print("="*60)
-    print(f"✓ Total images: {len(images)}")
-    print(f"✓ Successful: {sum(1 for r in results if r.get('success', False))}")
-    print(f"✓ Total time: {total_time:.2f}s ({total_time/60:.2f}m)")
-    print(f"✓ Models load time: {total_load_time:.2f}s")
+    print(f"Total images: {len(images)}")
+    print(f"Successful: {sum(1 for r in results if r.get('success', False))}")
+    print(f"Total time: {total_time:.2f}s ({total_time/60:.2f}m)")
+    print(f"Models load time: {total_load_time:.2f}s")
     print(f"  - ComfyUI models: {comfyui_load_time:.2f}s")
     print(f"  - Evaluation models: {eval_load_time:.2f}s")
-    print(f"✓ Processing time: {processing_time:.2f}s")
-    print(f"✓ Average time per image: {avg_time:.2f}s")
+    print(f"Processing time: {processing_time:.2f}s")
+    print(f"Average time per image: {avg_time:.2f}s")
     print("="*60 + "\n")
 
 

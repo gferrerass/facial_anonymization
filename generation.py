@@ -5,7 +5,9 @@ Contains ComfyUI model loading and image generation functions.
 
 import argparse
 import io
+import os
 import random
+import shutil
 import sys
 import time
 import warnings
@@ -292,32 +294,54 @@ def process_and_generate_image(
     )
     print("✓ Image stitched")
     
+    # Get output directory
+    import folder_paths
+    from datetime import datetime
+    output_dir = Path(folder_paths.get_output_directory())
+    
+    # Generate timestamp for unique filename
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    final_filename = f"{original_filename}_anonymized_{timestamp}.png"
+    final_path = output_dir / final_filename
+    
     # Save result
     saveimage = NODE_CLASS_MAPPINGS["SaveImage"]()
     saveimage.save_images(
-        filename_prefix=f"{original_filename}_anonymized",
+        filename_prefix=f"{original_filename}_anonymized_{timestamp}",
         images=get_value_at_index(final_image, 0)
     )
     
     gen_time = time.time() - gen_start_time
     print(f"✓ Image {idx} generated in {gen_time:.2f} seconds")
     
-    # Find and return path to generated image
-    import folder_paths
-    output_dir = Path(folder_paths.get_output_directory())
-    
-    # Find the most recent file that matches the pattern
-    pattern = f"{original_filename}_anonymized"
-    matching_files = sorted(
-        output_dir.glob(f"{pattern}*.png"),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True
-    )
-    
-    if not matching_files:
-        raise FileNotFoundError(f"Generated image not found in {output_dir} matching pattern '{pattern}*.png'")
-    
-    return matching_files[0]
+    # Verify the saved file exists
+    if final_path.exists():
+        print(f"✓ Image saved successfully: {final_filename}")
+        return final_path
+    else:
+        # Fallback: find the most recent file that matches the pattern
+        pattern = f"{original_filename}_anonymized_{timestamp}"
+        matching_files = sorted(
+            output_dir.glob(f"{pattern}*.png"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True
+        )
+        
+        if not matching_files:
+            raise FileNotFoundError(f"Generated image not found in {output_dir} matching pattern '{pattern}*.png'")
+        
+        generated_file = matching_files[0]
+        
+        # Try to rename to final path if different
+        if generated_file != final_path:
+            try:
+                os.rename(str(generated_file), str(final_path))
+                print(f"✓ Image renamed to: {final_filename}")
+            except Exception as e:
+                print(f"⚠ Warning: Could not rename file: {e}, using {generated_file.name}")
+                return generated_file
+        
+        return final_path
 
 
 # ============================================================================
