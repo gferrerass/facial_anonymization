@@ -11,6 +11,12 @@ Python application for facial anonymization through image generation, using Comf
 - **50GB+ free disk space** (for models)
 - **Git** installed
 
+### Windows Notes
+
+The setup script automatically handles all dependencies on Windows:
+- Installs required packages in the project virtual environment
+- No manual compilation or build tools needed for core functionality
+
 ## Custom Nodes (Auto-installed)
 
 The setup script automatically installs these ComfyUI custom nodes:
@@ -24,11 +30,20 @@ The setup script automatically installs these ComfyUI custom nodes:
 
 All dependencies for these nodes (including OpenCV, Ultralytics, etc.) are automatically installed during setup.
 
+### Evaluation Metrics
+
+The project includes advanced evaluation metrics for anonymized face quality:
+- **CLIP Similarity** - Semantic similarity using OpenAI CLIP
+- **LPIPS Distance** - Perceptual similarity using Learned Perceptual Image Patch Similarity
+- **InsightFace Similarity** - Face embedding cosine similarity (optional, requires `insightface` package)
+
 ## Project Structure
 
 ```
 facial_anonymization/
-├── generate.py           # Main execution script
+├── main.py               # Generation + Evaluation workflow
+├── evaluate.py           # Evaluation only (for existing images)
+├── generate.py           # Generation only script
 ├── setup.py              # Setup script
 ├── run.py                # Run script
 ├── requirements.txt      # Python dependencies
@@ -94,8 +109,10 @@ python setup.py
 
 The `setup.py` script handles:
 - Creating a virtual environment in `venv/`
-- Installing all Python dependencies
+- Installing all dependencies inside `venv` (no global Python pollution)
 - Setting up ComfyUI
+- Cloning and validating required custom nodes
+- Installing dependencies from each custom node `requirements.txt`
 
 ### Step 2: Download Models
 
@@ -152,3 +169,56 @@ python run.py --strength 0.6 --denoise 0.7 --input ./photos --output ./anonymize
 # Show help and all available options
 python run.py --help
 ```
+
+## Evaluation
+
+The project includes two scripts for evaluating anonymized images:
+
+### Using `main.py` (Generation + Evaluation)
+
+The `main.py` script combines generation and evaluation in a single workflow. It loads all models once at startup and processes images with evaluation metrics.
+
+```bash
+# Run generation with automatic evaluation
+python main.py
+
+# With custom parameters
+python main.py --input photos --output results --strength 0.7 --denoise 0.6
+```
+
+**Output:** Generates anonymized images and displays metrics for each:
+- CLIP Similarity
+- LPIPS Distance
+- InsightFace Similarity (if available)
+
+### Using `evaluate.py` (Evaluation Only)
+
+Use this script to evaluate already generated images without running the generation process again.
+
+```bash
+# Evaluate a single pair of images
+python evaluate.py input/original.jpg output/original_anonymized_0001.png
+
+# Save face crops and open them
+python evaluate.py input/photo.jpg output/photo_anonymized_0001.png --show
+
+# Specify custom output directory for crops
+python evaluate.py input/photo.jpg output/photo_anonymized_0001.png --output-dir evaluation_results
+```
+
+**Output:** Displays similarity metrics and saves cropped faces to a timestamped directory.
+
+### Installing InsightFace (Optional)
+
+For face embedding similarity metrics, install InsightFace:
+
+```bash
+# Activate virtual environment first
+.\venv\Scripts\activate  # Windows
+source venv/bin/activate  # Linux/Mac
+
+# Install InsightFace
+pip install insightface onnxruntime-gpu
+```
+
+If InsightFace is not installed, the scripts will skip this metric and display "N/A".

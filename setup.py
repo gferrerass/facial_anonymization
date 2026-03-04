@@ -8,6 +8,7 @@ import os
 import sys
 import subprocess
 import platform
+import shutil
 from pathlib import Path
 
 def run_command(command, description):
@@ -23,6 +24,144 @@ def run_command(command, description):
         print(f"✗ {description} - FAILED")
         print(f"Error: {e}")
         return False
+
+def build_pip_env(python_exe: str) -> dict:
+    """Build environment variables for pip commands, prioritizing venv executables in PATH."""
+    env = os.environ.copy()
+    python_path = Path(python_exe)
+    scripts_dir = python_path.parent
+    current_path = env.get("PATH", "")
+    env["PATH"] = f"{scripts_dir}{os.pathsep}{current_path}" if current_path else str(scripts_dir)
+    return env
+
+def find_vcvars64_bat() -> str:
+    """Find vcvars64.bat from common Visual Studio Build Tools locations."""
+    base_candidates = [
+        os.environ.get("ProgramFiles(x86)"),
+        os.environ.get("ProgramFiles")
+    ]
+
+    for base in base_candidates:
+        if not base:
+            continue
+        vs_root = Path(base) / "Microsoft Visual Studio"
+        if not vs_root.exists():
+            continue
+        matches = sorted(vs_root.glob("*/*/VC/Auxiliary/Build/vcvars64.bat"), reverse=True)
+        if matches:
+            return str(matches[0])
+    return None
+
+def try_install_msvc_build_tools_with_winget() -> bool:
+    """Try to install Visual Studio Build Tools (C++ workload) using winget."""
+    if platform.system() != "Windows":
+        return False
+
+    winget_exe = shutil.which("winget")
+    if not winget_exe:
+        print("\n⚠ winget not found. Cannot auto-install MSVC Build Tools.")
+        return False
+
+    print("\n▶ Attempting automatic installation of Visual Studio Build Tools (C++ workload) via winget...")
+    install_cmd = [
+        winget_exe,
+        "install",
+        "--id", "Microsoft.VisualStudio.2022.BuildTools",
+        "-e",
+        "--accept-package-agreements",
+        "--accept-source-agreements",
+        "--override",
+        "--quiet --wait --norestart --nocache --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+    ]
+
+    result = subprocess.run(install_cmd, capture_output=False)
+    if result.returncode == 0:
+        print("✓ Visual Studio Build Tools installation completed")
+        return True
+
+    print("⚠ Automatic Build Tools installation failed (may require running terminal as Administrator)")
+    return False
+
+def check_windows_native_build_tools_for_deps(custom_nodes_deps: dict, python_exe: str, pip_env: dict) -> dict:
+    """
+    Check whether Windows has CMake and MSVC compiler available when native deps are required.
+    Returns toolchain details used for native package installation on Windows.
+    """
+    toolchain = {
+        "needs_native": False,
+        "cmake_ok": True,
+        "msvc_ok": True,
+        "vcvars_bat": None
+    }
+
+    if platform.system() != "Windows":
+        return toolchain
+
+    native_deps = set()  # No native dependencies required
+    found_native_deps = set()
+
+    for deps in custom_nodes_deps.values():
+        for dep in deps:
+            dep_name = dep.split('>=')[0].split('==')[0].split('!=')[0].split('<')[0].split('>')[0].strip().lower()
+            if dep_name in native_deps:
+                found_native_deps.add(dep_name)
+
+    if not found_native_deps:
+        return toolchain
+
+    toolchain["needs_native"] = True
+
+    cmake_ok = shutil.which("cmake", path=pip_env.get("PATH")) is not None
+    if not cmake_ok:
+        print("\n▶ CMake not found in PATH. Installing CMake into venv...")
+        cmake_install = subprocess.run(
+            [python_exe, "-m", "pip", "install", "cmake>=3.28.0"],
+            capture_output=True,
+            text=True,
+            env=pip_env
+        )
+        cmake_ok = cmake_install.returncode == 0 and shutil.which("cmake", path=pip_env.get("PATH")) is not None
+
+    msvc_ok = shutil.which("cl", path=pip_env.get("PATH")) is not None
+    vcvars_bat = find_vcvars64_bat()
+
+    if not msvc_ok and vcvars_bat:
+        msvc_ok = True
+
+    if not msvc_ok and not vcvars_bat:
+        installed = try_install_msvc_build_tools_with_winget()
+        if installed:
+            vcvars_bat = find_vcvars64_bat()
+            msvc_ok = shutil.which("cl", path=pip_env.get("PATH")) is not None or vcvars_bat is not None
+
+    toolchain["cmake_ok"] = cmake_ok
+    toolchain["msvc_ok"] = msvc_ok
+    toolchain["vcvars_bat"] = vcvars_bat
+
+    if cmake_ok and msvc_ok:
+        if vcvars_bat:
+            print("\n✓ Native build tools ready (CMake + MSVC via vcvars64)")
+        else:
+            print("\n✓ Native build tools ready (CMake + MSVC)")
+        return toolchain
+
+    print(f"\n{'='*60}")
+    print("⚠ Windows native build tools missing for custom node dependencies")
+    print(f"{'='*60}")
+    print(f"   Detected native packages: {', '.join(sorted(found_native_deps))}")
+
+    if not cmake_ok:
+        print("   - CMake not found in PATH")
+        print("     Install from: https://cmake.org/download/")
+        print("     Make sure to enable 'Add CMake to the system PATH' during install")
+
+    if not msvc_ok:
+        print("   - MSVC compiler (cl.exe) not found in PATH")
+        print("     Install: Visual Studio Build Tools (Desktop development with C++)")
+        print("     https://visualstudio.microsoft.com/visual-cpp-build-tools/")
+
+    print("\n💡 Setup will continue, but packages that need native compilation may fail.")
+    return toolchain
 
 def ensure_comfyui_repo(base_dir: Path) -> Path:
     """Ensure ComfyUI repo exists in zimage/ComfyUI. Returns path or None."""
@@ -274,6 +413,8 @@ def install_custom_nodes_dependencies(python_exe: str, comfyui_dir: Path) -> boo
     Returns True if all dependencies were installed successfully.
     """
     custom_nodes_deps = collect_custom_nodes_dependencies(comfyui_dir)
+    pip_env = build_pip_env(python_exe)
+    native_toolchain = check_windows_native_build_tools_for_deps(custom_nodes_deps, python_exe, pip_env)
     
     if not custom_nodes_deps:
         print("⚠ No custom_nodes with requirements.txt found")
@@ -306,16 +447,16 @@ def install_custom_nodes_dependencies(python_exe: str, comfyui_dir: Path) -> boo
     # First, ensure opencv-python-headless is installed (avoid conflicts)
     if opencv_deps:
         print("\n🔧 Installing OpenCV (headless version to avoid GUI conflicts)...")
-        # Remove any existing opencv packages first
         subprocess.run(
             [python_exe, "-m", "pip", "uninstall", "-y", "opencv-python", "opencv-contrib-python"],
-            capture_output=True
+            capture_output=True,
+            env=pip_env
         )
-        # Install opencv-python-headless
         result = subprocess.run(
             [python_exe, "-m", "pip", "install", "opencv-python-headless"],
             capture_output=True,
-            text=True
+            text=True,
+            env=pip_env
         )
         if result.returncode == 0:
             print("✓ opencv-python-headless")
@@ -323,14 +464,36 @@ def install_custom_nodes_dependencies(python_exe: str, comfyui_dir: Path) -> boo
             print("✗ opencv-python-headless - FAILED")
             failed_deps.append("opencv-python-headless")
     
-    # Install other dependencies
+    native_packages = set()  # No native packages required
     for dep in other_deps:
-        result = subprocess.run(
-            [python_exe, "-m", "pip", "install", dep],
-            capture_output=True,
-            text=True
-        )
         dep_name = dep.split('>=')[0].split('==')[0].split('!=')[0].split('<')[0].split('>')[0]
+        dep_name_normalized = dep_name.strip().lower()
+
+        use_msvc_shell = (
+            platform.system() == "Windows"
+            and dep_name_normalized in native_packages
+            and native_toolchain.get("vcvars_bat") is not None
+        )
+
+        if use_msvc_shell:
+            vcvars = native_toolchain["vcvars_bat"]
+            print(f"🔧 Building {dep_name} with MSVC environment...")
+            native_install_cmd = f'cmd /d /s /c "\"{vcvars}\" >nul 2>nul && \"{python_exe}\" -m pip install \"{dep}\""'
+            result = subprocess.run(
+                native_install_cmd,
+                shell=True,
+                capture_output=True,
+                text=True,
+                env=pip_env
+            )
+        else:
+            result = subprocess.run(
+                [python_exe, "-m", "pip", "install", dep],
+                capture_output=True,
+                text=True,
+                env=pip_env
+            )
+
         if result.returncode == 0:
             print(f"✓ {dep_name}")
         else:
@@ -416,7 +579,7 @@ def main():
     else:
         python_exe = str(venv_dir / "bin" / "python")
     
-    print(f"\n🔧 Using virtual environment Python: {python_exe}")
+    print(f"\nUsing virtual environment Python: {python_exe}")
     print(f"   All packages will be installed in the isolated venv")
     
     # Upgrade pip using venv python
