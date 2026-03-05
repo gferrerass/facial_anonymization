@@ -262,7 +262,7 @@ def import_custom_nodes() -> None:
             sys.path.insert(0, str(impact_subpack_path))
             from modules import subpack_nodes
             NODE_CLASS_MAPPINGS.update(subpack_nodes.NODE_CLASS_MAPPINGS)
-            print(f"✓ Manually loaded Impact-Subpack nodes")
+            print(f"Manually loaded Impact-Subpack nodes")
         except Exception as e:
             print(f"Failed to manually load Impact-Subpack: {e}")
         finally:

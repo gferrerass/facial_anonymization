@@ -5,15 +5,11 @@ Combines generation and evaluation in a single workflow.
 Loads all models once at startup.
 """
 
-import argparse
-import sys
 import time
 from pathlib import Path
-from typing import Any
-
 import torch
 
-# Import shared utilities (UTF-8 config and warnings already applied)
+# Import shared utilities
 from shared_utils import (
     ensure_running_in_venv,
     configure_local_paths,
@@ -52,7 +48,6 @@ Examples:
   python main.py --input custom_input --output custom_output
   python main.py --strength 0.8 --denoise 0.7 --max-images 5
   python main.py --insightface-threshold 0.7 --clip-threshold 0.8 --max-iterations 5
-  python main.py --input ./photos --output ./results --max-images 10
         """
     )
     args = parser.parse_args()
@@ -155,7 +150,6 @@ Examples:
                         "insightface_score": insightface_score,
                         "clip_score": clip_score,
                         "lpips_score": lpips_score,
-                        "success": True,
                     }
                     
                     # Log evaluation results immediately after evaluation

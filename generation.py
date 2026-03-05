@@ -15,7 +15,7 @@ from typing import Any, Dict
 
 import torch
 
-# Import shared utilities (UTF-8 config and warnings already applied)
+# Import shared utilities
 from shared_utils import (
     ensure_running_in_venv,
     configure_local_paths,
@@ -337,10 +337,6 @@ def process_and_generate_image(
         
         return final_path
 
-
-# ============================================================================
-# UTILITIES
-# ============================================================================
 # ============================================================================
 # MAIN
 # ============================================================================
@@ -355,7 +351,6 @@ Examples:
   python generation.py
   python generation.py --input custom_input --output custom_output
   python generation.py --strength 0.8 --denoise 0.7 --max-images 5
-  python generation.py --input ./photos --output ./results --max-images 10
         """
     )
     args = parser.parse_args()

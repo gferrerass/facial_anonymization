@@ -15,8 +15,12 @@ import torch.nn.functional as F
 from PIL import Image
 from torchvision import transforms
 
-# Import utilities from shared_utils (UTF-8 config and warnings already applied there)
-from shared_utils import ensure_running_in_venv, load_image_cv2, suppress_stdout_stderr
+# Import utilities from shared_utils
+from shared_utils import (
+    ensure_running_in_venv,
+    load_image_cv2,
+    suppress_stdout_stderr,
+)
 
 
 def load_evaluation_models():
@@ -83,7 +87,7 @@ def load_evaluation_models():
                     insightface_model.prepare(ctx_id=ctx_id, det_size=(640, 640))
                 break
             except Exception as e:
-                print(f"⚠ Could not load InsightFace with {provider_name}: {e}")
+                print(f"Could not load InsightFace with {provider_name}: {e}")
                 insightface_model = None
     else:
         print("InsightFace not available; skipping InsightFace similarity metric")
@@ -182,12 +186,10 @@ def calculate_insightface_similarity(
     if emb1 is None or emb2 is None:
         raise RuntimeError("InsightFace could not detect a face in one or both crops")
 
-    # Use the same formula as faceanalysis.py line 433
+    # Use the same formula as in Faceanalysis (ComfyUI custom node)
+    # https://github.com/cubiq/ComfyUI_FaceAnalysis/blob/main/faceanalysis.py
     dist = np.float64(1 - np.dot(emb1, emb2) / (np.linalg.norm(emb1) * np.linalg.norm(emb2)))
     return float(dist)
-
-
-
 
 
 def parse_args() -> argparse.Namespace:

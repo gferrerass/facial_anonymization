@@ -23,7 +23,7 @@ facial_anonymization/
 |- output/
 |- models/
 |- ComfyUI/
-`- venv/
+|- venv/
 ```
 
 ## Main scripts

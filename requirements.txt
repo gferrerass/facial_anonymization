@@ -30,6 +30,14 @@ einops>=0.6.0
 torchsde>=0.2.5
 av>=10.0.0
 
+# Evaluation dependencies
+insightface>=0.7.3
+onnxruntime>=1.16.0
+onnxruntime-gpu>=1.16.0
+lpips>=0.1.4
+open_clip_torch>=2.20.0
+ultralytics>=8.0.0
+
 # Note: Florence2 models will be downloaded automatically from Hugging Face
 # Model: MiaoshouAI/Florence-2-base-PromptGen-v1.5
 # Models will be cached in: ~/.cache/huggingface/hub/
