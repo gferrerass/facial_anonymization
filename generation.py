@@ -26,8 +26,12 @@ from shared_utils import (
 )
 
 
-def load_comfyui_models() -> Dict[str, Any]:
-    """Load all ComfyUI models for generation."""
+def load_comfyui_models(use_controlnet: bool = True) -> Dict[str, Any]:
+    """Load all ComfyUI models for generation.
+    
+    Args:
+        use_controlnet: Whether to load the ControlNet model patch. Default: True
+    """
     from nodes import NODE_CLASS_MAPPINGS
     
     print("\nLoading ComfyUI generation models...")
@@ -70,11 +74,16 @@ def load_comfyui_models() -> Dict[str, Any]:
         weight_dtype="default"
     )
 
-    # Load model patch (ControlNet)
-    modelpatchloader = NODE_CLASS_MAPPINGS["ModelPatchLoader"]()
-    model_patch = modelpatchloader.load_model_patch(
-        name="Z-Image-Turbo-Fun-Controlnet-Union.safetensors"
-    )
+    # Load model patch (ControlNet) only if requested
+    model_patch = None
+    if use_controlnet:
+        modelpatchloader = NODE_CLASS_MAPPINGS["ModelPatchLoader"]()
+        model_patch = modelpatchloader.load_model_patch(
+            name="Z-Image-Turbo-Fun-Controlnet-Union.safetensors"
+        )
+        print("ControlNet model patch loaded")
+    else:
+        print("ControlNet disabled - model patch not loaded")
     
     models_load_time = time.time() - models_load_start
     print(f"ComfyUI models loaded in {models_load_time:.2f} seconds")
@@ -87,6 +96,7 @@ def load_comfyui_models() -> Dict[str, Any]:
         "unet": unet,
         "model_patch": model_patch,
         "load_time": models_load_time,
+        "use_controlnet": use_controlnet,
     }
 
 
@@ -224,15 +234,6 @@ def process_and_generate_image(
     )
     print("Inpainting conditioning prepared")
     
-    # Apply Canny edge detection
-    aio_preprocessor = NODE_CLASS_MAPPINGS["AIO_Preprocessor"]()
-    canny_edges = aio_preprocessor.execute(
-        preprocessor="CannyEdgePreprocessor",
-        resolution=512,
-        image=get_value_at_index(inpaint_crop, 1),
-    )
-    print("Canny edge detection applied")
-    
     # Apply model patches
     modelsamplingauraflow = NODE_CLASS_MAPPINGS["ModelSamplingAuraFlow"]()
     model_patched = modelsamplingauraflow.patch_aura(
@@ -247,16 +248,32 @@ def process_and_generate_image(
     )
     print("Model patches applied")
     
-    # Apply ControlNet
-    qwenimagediffsynthcontrolnet = NODE_CLASS_MAPPINGS["QwenImageDiffsynthControlnet"]()
-    model_with_controlnet = qwenimagediffsynthcontrolnet.diffsynth_controlnet(
-        strength=controlnet_strength,
-        model=get_value_at_index(model_differential, 0),
-        model_patch=get_value_at_index(comfyui_models["model_patch"], 0),
-        vae=get_value_at_index(comfyui_models["vae"], 0),
-        image=get_value_at_index(canny_edges, 0),
-    )
-    print(f"ControlNet applied")
+    # Apply ControlNet conditionally
+    use_controlnet = comfyui_models.get("use_controlnet", True)
+    if use_controlnet and comfyui_models["model_patch"] is not None:
+        # Apply Canny edge detection
+        aio_preprocessor = NODE_CLASS_MAPPINGS["AIO_Preprocessor"]()
+        canny_edges = aio_preprocessor.execute(
+            preprocessor="CannyEdgePreprocessor",
+            resolution=512,
+            image=get_value_at_index(inpaint_crop, 1),
+        )
+        print("Canny edge detection applied")
+        
+        qwenimagediffsynthcontrolnet = NODE_CLASS_MAPPINGS["QwenImageDiffsynthControlnet"]()
+        model_with_controlnet = qwenimagediffsynthcontrolnet.diffsynth_controlnet(
+            strength=controlnet_strength,
+            model=get_value_at_index(model_differential, 0),
+            model_patch=get_value_at_index(comfyui_models["model_patch"], 0),
+            vae=get_value_at_index(comfyui_models["vae"], 0),
+            image=get_value_at_index(canny_edges, 0),
+        )
+        model_to_use = get_value_at_index(model_with_controlnet, 0)
+        print(f"ControlNet applied with strength {controlnet_strength}")
+    else:
+        # Use model without ControlNet
+        model_to_use = get_value_at_index(model_differential, 0)
+        print("ControlNet disabled - using base model")
     
     # Sample
     ksampler = NODE_CLASS_MAPPINGS["KSampler"]()
@@ -267,7 +284,7 @@ def process_and_generate_image(
         sampler_name="euler",
         scheduler="normal",
         denoise=denoise_strength,
-        model=get_value_at_index(model_with_controlnet, 0),
+        model=model_to_use,
         positive=get_value_at_index(inpaint_conditioning, 0),
         negative=get_value_at_index(inpaint_conditioning, 1),
         latent_image=get_value_at_index(inpaint_conditioning, 2),
@@ -370,6 +387,7 @@ Examples:
     print(f"ControlNet strength: {args.strength}")
     print(f"Denoise strength: {args.denoise}")
     print(f"KSampler steps: {args.steps}")
+    print(f"Use ControlNet: {not args.no_controlnet}")
     print("="*60)
     
     # Setup
@@ -393,7 +411,7 @@ Examples:
         print("   LOADING COMFYUI MODELS")
         print("="*60)
         
-        comfyui_models = load_comfyui_models()
+        comfyui_models = load_comfyui_models(use_controlnet=not args.no_controlnet)
         
         print("="*60)
         

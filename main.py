@@ -46,7 +46,7 @@ def main():
 Examples:
   python main.py
   python main.py --input custom_input --output custom_output
-  python main.py --strength 0.8 --denoise 0.7 --max-images 5 --steps 7
+  python main.py --strength 0.8 --denoise 0.7 --max-images 5 --steps 7 --no-controlnet
   python main.py --insightface-threshold 0.7 --clip-threshold 0.8 --max-iterations 5
         """
     )
@@ -69,6 +69,7 @@ Examples:
     print(f"InsightFace threshold: {args.insightface_threshold}")
     print(f"CLIP threshold: {args.clip_threshold}")
     print(f"LPIPS threshold: {args.lpips_threshold}")
+    print(f"Use ControlNet: {not args.no_controlnet}")
     print("="*60)
     
     # Setup
@@ -94,7 +95,7 @@ Examples:
         print("   LOADING ALL MODELS")
         print("="*60)
         
-        comfyui_models = load_comfyui_models()
+        comfyui_models = load_comfyui_models(use_controlnet=not args.no_controlnet)
         eval_models = load_evaluation_models()
         
         # Process each image with iterative optimization

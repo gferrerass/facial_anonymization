@@ -383,6 +383,12 @@ def build_argument_parser(description: str, epilog: str = "") -> "argparse.Argum
         help="KSampler steps (inference steps). Higher values = better quality but slower. Default: 9"
     )
     
+    parser.add_argument(
+        "--no-controlnet",
+        action="store_true",
+        help="Disable ControlNet usage. Generation will not be conditioned by edge detection."
+    )
+    
     return parser
 
 
