@@ -376,6 +376,13 @@ def build_argument_parser(description: str, epilog: str = "") -> "argparse.Argum
         help="Maximum number of generation iterations per image (1-10). Default: 3"
     )
     
+    parser.add_argument(
+        "--steps",
+        type=int,
+        default=9,
+        help="KSampler steps (inference steps). Higher values = better quality but slower. Default: 9"
+    )
+    
     return parser
 
 

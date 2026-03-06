@@ -97,6 +97,7 @@ def process_and_generate_image(
     comfyui_models: Dict[str, Any],
     controlnet_strength: float = 0.7,
     denoise_strength: float = 0.6,
+    steps: int = 9,
 ) -> Path:
     """Generate anonymized image using ComfyUI workflow."""
     from nodes import NODE_CLASS_MAPPINGS
@@ -261,7 +262,7 @@ def process_and_generate_image(
     ksampler = NODE_CLASS_MAPPINGS["KSampler"]()
     samples = ksampler.sample(
         seed=random.randint(1, 2**64),
-        steps=9,
+        steps=steps,
         cfg=1,
         sampler_name="euler",
         scheduler="normal",
@@ -271,7 +272,7 @@ def process_and_generate_image(
         negative=get_value_at_index(inpaint_conditioning, 1),
         latent_image=get_value_at_index(inpaint_conditioning, 2),
     )
-    print(f"Inpainting completed")
+    print(f"Inpainting completed with {steps} steps")
     
     # Decode
     vaedecode = NODE_CLASS_MAPPINGS["VAEDecode"]()
@@ -351,6 +352,7 @@ Examples:
   python generation.py
   python generation.py --input custom_input --output custom_output
   python generation.py --strength 0.8 --denoise 0.7 --max-images 5
+  python generation.py --steps 20 --strength 0.8 --denoise 0.7
         """
     )
     args = parser.parse_args()
@@ -367,6 +369,7 @@ Examples:
         print(f"Max images: {args.max_images}")
     print(f"ControlNet strength: {args.strength}")
     print(f"Denoise strength: {args.denoise}")
+    print(f"KSampler steps: {args.steps}")
     print("="*60)
     
     # Setup
@@ -401,7 +404,8 @@ Examples:
                 generated_path = process_and_generate_image(
                     idx, len(images), image_path, comfyui_models,
                     controlnet_strength=args.strength,
-                    denoise_strength=args.denoise
+                    denoise_strength=args.denoise,
+                    steps=args.steps
                 )
                 
                 results.append({

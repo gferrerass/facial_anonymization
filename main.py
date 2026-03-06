@@ -46,7 +46,7 @@ def main():
 Examples:
   python main.py
   python main.py --input custom_input --output custom_output
-  python main.py --strength 0.8 --denoise 0.7 --max-images 5
+  python main.py --strength 0.8 --denoise 0.7 --max-images 5 --steps 7
   python main.py --insightface-threshold 0.7 --clip-threshold 0.8 --max-iterations 5
         """
     )
@@ -64,6 +64,7 @@ Examples:
         print(f"Max images: {args.max_images}")
     print(f"Initial ControlNet strength: {args.strength}")
     print(f"Initial Denoise strength: {args.denoise}")
+    print(f"KSampler steps: {args.steps}")
     print(f"Max iterations per image: {args.max_iterations}")
     print(f"InsightFace threshold: {args.insightface_threshold}")
     print(f"CLIP threshold: {args.clip_threshold}")
@@ -124,7 +125,8 @@ Examples:
                     anonymized_path = process_and_generate_image(
                         idx, len(images), image_path, comfyui_models,
                         controlnet_strength=current_strength,
-                        denoise_strength=current_denoise
+                        denoise_strength=current_denoise,
+                        steps=args.steps
                     )
                     generation_time = time.time() - generation_start_time
                     generation_times.append(generation_time)
