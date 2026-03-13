@@ -107,7 +107,7 @@ Download and place the following model files in the `models/` directory:
 | Qwen Text Encoder | `models/text_encoders/qwen_3_4b.safetensors` | [Download](https://huggingface.co/Comfy-Org/z_image_turbo/blob/main/split_files/text_encoders/qwen_3_4b.safetensors) |
 | Z-Image-Turbo UNet | `models/unet/z_image_turbo_bf16.safetensors` | [Download](https://huggingface.co/Comfy-Org/z_image_turbo/blob/main/split_files/diffusion_models/z_image_turbo_bf16.safetensors) |
 | VAE Encoder | `models/vae/ae.safetensors` | [Download](https://huggingface.co/Comfy-Org/z_image_turbo/blob/main/split_files/vae/ae.safetensors) |
-| Face Detection | `models/ultralytics/bbox/face_yolov8m.pt` | [Download](https://huggingface.co/Ultralytics/YOLOv8/tree/main) |
+| Face Detection | `models/ultralytics/bbox/face_yolov8m.pt` | [Download](https://huggingface.co/datasets/Gourieff/ReActor/blob/main/models/detection/bbox/face_yolov8m.pt) |
 | ControlNet | `models/controlnet/Z-Image-Turbo-Fun-Controlnet-Union.safetensors` | [Download](https://huggingface.co/alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union/blob/main/Z-Image-Turbo-Fun-Controlnet-Union.safetensors) |
 
 ---

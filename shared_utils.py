@@ -200,11 +200,13 @@ def configure_local_paths(output_dir_override=None) -> None:
     model_patches_dir.mkdir(parents=True, exist_ok=True)
     folder_paths.add_model_folder_path("model_patches", str(model_patches_dir))
     
-    ultralytics_bbox_dir = models_dir / "ultralytics" / "bbox"
-    ultralytics_segm_dir = models_dir / "ultralytics" / "segm"
+    ultralytics_dir = models_dir / "ultralytics"
+    ultralytics_bbox_dir = ultralytics_dir / "bbox"
+    ultralytics_segm_dir = ultralytics_dir / "segm"
     ultralytics_bbox_dir.mkdir(parents=True, exist_ok=True)
     ultralytics_segm_dir.mkdir(parents=True, exist_ok=True)
-    
+
+    folder_paths.add_model_folder_path("ultralytics", str(ultralytics_dir))
     folder_paths.add_model_folder_path("ultralytics_bbox", str(ultralytics_bbox_dir))
     folder_paths.add_model_folder_path("ultralytics_segm", str(ultralytics_segm_dir))
     

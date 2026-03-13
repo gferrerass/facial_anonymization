@@ -89,6 +89,9 @@ Examples:
     generation_times = []  # Time for each generation call
     image_total_times = []  # Total time per image (all iterations)
     iterations_per_image = []  # Number of iterations per image
+    final_insightface_scores = []  # One value per image: last iteration
+    final_clip_scores = []  # One value per image: last iteration
+    final_lpips_scores = []  # One value per image: last iteration
     
     with torch.inference_mode():
         # Load all models once at the beginning
@@ -114,6 +117,7 @@ Examples:
                 original_image = load_image_cv2(Path(image_path), "original")
                 
                 # Iterative optimization loop
+                current_result = None
                 while iteration < args.max_iterations:
                     iteration += 1
                     print("="*60)
@@ -188,6 +192,13 @@ Examples:
                     
                 if iteration == args.max_iterations:
                     print(f"  Reached maximum iterations without meeting all thresholds.")
+
+                # Keep only metrics from the last iteration performed for this image
+                if current_result is not None:
+                    if current_result["insightface_score"] is not None:
+                        final_insightface_scores.append(current_result["insightface_score"])
+                    final_clip_scores.append(current_result["clip_score"])
+                    final_lpips_scores.append(current_result["lpips_score"])
                 
                 # Track iterations and total time for this image
                 iterations_per_image.append(iteration)
@@ -206,6 +217,13 @@ Examples:
     avg_generation_time = sum(generation_times) / len(generation_times) if generation_times else 0
     avg_image_total_time = sum(image_total_times) / len(image_total_times) if image_total_times else 0
     avg_iterations = sum(iterations_per_image) / len(iterations_per_image) if iterations_per_image else 0
+    avg_final_insightface = (
+        sum(final_insightface_scores) / len(final_insightface_scores)
+        if final_insightface_scores
+        else None
+    )
+    avg_final_clip = sum(final_clip_scores) / len(final_clip_scores) if final_clip_scores else None
+    avg_final_lpips = sum(final_lpips_scores) / len(final_lpips_scores) if final_lpips_scores else None
     
     # Summary
     total_time = time.time() - total_start_time
@@ -227,6 +245,18 @@ Examples:
     print(f"Average time per generation: {avg_generation_time:.2f}s")
     print(f"Average time per final image: {avg_image_total_time:.2f}s")
     print(f"Average iterations per image: {avg_iterations:.2f}")
+    if avg_final_insightface is not None:
+        print(f"Average final InsightFace Dist.: {avg_final_insightface:.4f}")
+    else:
+        print(f"Average final InsightFace Dist.: N/A")
+    if avg_final_clip is not None:
+        print(f"Average final CLIP Similarity:  {avg_final_clip:.4f}")
+    else:
+        print(f"Average final CLIP Similarity:  N/A")
+    if avg_final_lpips is not None:
+        print(f"Average final LPIPS Distance:   {avg_final_lpips:.4f}")
+    else:
+        print(f"Average final LPIPS Distance:   N/A")
     print("="*60 + "\n")
 
 
