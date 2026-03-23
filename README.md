@@ -1,8 +1,16 @@
 # Facial Anonymization
 
-**A ComfyUI-based facial anonymization pipeline for image generation and evaluation with automatic parameter tuning.**
+**A production-ready research and engineering framework for privacy-preserving image generation.**
 
-A powerful tool for generating privacy-preserving anonymized versions of facial images while maintaining semantic content and visual quality using advanced diffusion models.
+This repository implements a facial anonymization pipeline built on ComfyUI and latent diffusion models (Z-Image-Turbo), balancing identity disruption with semantic integrity.
+
+---
+
+## Core Engineering Principles
+
+- **Decoupled Architecture**: `generation.py` and `evaluation.py` are separated so each stage can be tested, profiled, and scaled independently.
+- **Automated Parameter Tuning**: `main.py` uses a closed-loop generation/evaluation workflow that automatically adjusts parameters from metric feedback.
+- **Modular Pipeline Design**: Shared CLI and utility logic in `shared_utils.py` keeps behavior consistent and simplifies integration into larger ML/ops workflows.
 
 ---
 
@@ -22,9 +30,12 @@ Below are examples of the facial anonymization process:
 
 ## Metrics
 
+These metrics are not only quality indicators, they enforce a practical privacy/utility balance for responsible AI use.
+
 - **InsightFace Distance**: Embedding-space distance between detected faces (identity removal)
 - **CLIP Similarity**: Semantic similarity between original and anonymized images (semantic preservation)
 - **LPIPS Distance**: Perceptual distance between original and anonymized images (perceptual quality)
+- **Identity Removal vs. Semantic Preservation**: The key trade-off is maximizing InsightFace identity disruption while keeping CLIP context preservation high enough for downstream usefulness.
 
 ---
 
@@ -73,6 +84,10 @@ facial_anonymization/
 - **NVIDIA GPU** (recommended for better performance)
 - **Disk Space**: Sufficient space for models
 
+### Optimization Note
+
+- **VRAM Efficiency**: The pipeline relies on bf16 model weights (for example, `z_image_turbo_bf16.safetensors`) to reduce memory pressure and improve feasibility on consumer GPUs and production-like environments.
+
 ---
 
 ## Installation
@@ -80,7 +95,7 @@ facial_anonymization/
 ### 1. Clone the Repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/gferrerass/facial_anonymization
 cd facial_anonymization
 ```
 
@@ -139,6 +154,9 @@ python main.py --strength 0.7 --denoise 0.6 --max-images 10
 
 # Custom quality thresholds
 python main.py --insightface-threshold 0.65 --clip-threshold 0.75 --lpips-threshold 0.3
+
+# Improve performance (may reduce CLIP/LPIPS quality)
+python main.py --no-controlnet
 ```
 
 ### Generation Only
@@ -149,6 +167,9 @@ python generation.py
 
 # Custom parameters
 python generation.py --input input --output output --strength 0.7 --denoise 0.6 --max-images 5
+
+# Faster generation without ControlNet (can sacrifice CLIP/LPIPS scores)
+python generation.py --no-controlnet
 ```
 
 ### Evaluation Only
@@ -172,8 +193,14 @@ python evaluation.py input/original.jpg output/original_anonymized_20260305_1200
 | `--input` | `input` | Input directory path |
 | `--output` | `output` | Output directory path |
 | `--max-images` | *all* | Maximum number of images to process |
-| `--strength` | `0.7` | ControlNet strength (0-1) |
-| `--denoise` | `0.6` | Sampler denoise strength (0-1) |
+| `--strength` | `0.7` | ControlNet strength (0-1). Higher values usually enforce stronger structure preservation (stronger conservation) |
+| `--denoise` | `0.6` | Sampler denoise strength (0-1). Higher values usually produce stronger anonymization |
+| `--no-controlnet` | `False` | Disable ControlNet for better performance, but this can reduce CLIP and LPIPS scores |
+
+Quick guidance:
+- Increase `--denoise` for stronger anonymization.
+- Increase `--strength` for stronger structure conservation when ControlNet is enabled.
+- Use `--no-controlnet` to improve performance, knowing CLIP/LPIPS quality can drop.
 
 ### `main.py` Only
 
